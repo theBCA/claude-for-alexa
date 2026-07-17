@@ -1,0 +1,45 @@
+{
+  "manifest": {
+    "manifestVersion": "1.0",
+    "publishingInformation": {
+      "locales": {
+        "en-US": {
+          "name": "My Agent",
+          "summary": "Voice bridge to a personal OpenClaw agent running Claude.",
+          "description": "Talks to a self-hosted OpenClaw agent (running Claude) through a personal HTTPS bridge you run yourself. Personal-use skill, kept in development mode — not distributed through the public skill store.",
+          "examplePhrases": [
+            "Alexa, ask my agent to check my calendar",
+            "Alexa, open my agent",
+            "Alexa, ask my agent what's on my schedule"
+          ],
+          "keywords": ["assistant", "openclaw", "claude", "agent"]
+        }
+      },
+      "isAvailableWorldwide": false,
+      "testingInstructions": "Personal-use skill backed by a self-hosted bridge (see repo README). No public testing account exists.",
+      "category": "ORGANIZERS_AND_ASSISTANTS",
+      "distributionCountries": []
+    },
+    "apis": {
+      "custom": {
+        "endpoint": {
+          "uri": "https://REPLACE-WITH-YOUR-TUNNEL-URL/alexa"
+        },
+        "interfaces": []
+      }
+    },
+    "manifestVersion": "1.0",
+    "privacyAndCompliance": {
+      "allowsPurchases": false,
+      "usesPersonalInfo": false,
+      "isExportCompliant": true,
+      "isChildDirected": false,
+      "containsAds": false,
+      "locales": {
+        "en-US": {
+          "privacyPolicyUrl": ""
+        }
+      }
+    }
+  }
+}

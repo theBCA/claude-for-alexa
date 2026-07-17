@@ -63,23 +63,55 @@ cloudflared tunnel run --url http://localhost:3980 alexa-bridge
 
 Endpoint: `https://alexa.yourdomain.com/alexa`
 
-## 3. Create the Alexa Skill
+## 3. Register the Alexa Skill
 
-1. Go to https://developer.amazon.com/alexa/console/ask and sign in with the SAME Amazon account your Echo Dot Max is registered to. This matters: skills in development mode are automatically available on your own devices only.
-2. Create Skill.
+Sign in to https://developer.amazon.com/alexa/console/ask with the SAME Amazon account your Echo Dot Max is registered to first — this matters: skills in development mode are automatically available on your own devices only, no publishing step involved.
+
+### Option A: `ask-cli` (recommended — one command, repeatable)
+
+The `skill-package/` directory in this repo is a ready-to-deploy ASK CLI project.
+
+```bash
+npm install -g ask-cli
+ask configure              # links your Amazon developer account (skip the AWS/Lambda prompts — this skill is self-hosted)
+```
+
+Before the first deploy, edit `skill-package/skill.json` and replace
+`https://REPLACE-WITH-YOUR-TUNNEL-URL/alexa` with your actual tunnel URL + `/alexa`
+from step 2.
+
+```bash
+ask deploy
+```
+
+This creates the skill on your account and uploads both the manifest and the
+interaction model in one shot. Your account-specific skill ID gets written to
+`.ask/` (gitignored — it's per-developer state, not something to commit).
+
+Whenever you change `skill-package/skill.json` or
+`skill-package/interactionModels/custom/en-US.json` (or your tunnel URL
+changes), just run `ask deploy` again.
+
+> Do not run `ask smapi submit-skill-for-certification-request` — that starts
+> Amazon's public store review process, which this personal setup isn't meant
+> for (see "Going public later" below).
+
+### Option B: Manual console setup
+
+1. Create Skill.
    - Name: My Agent (anything you like)
    - Primary locale: match your Echo's language (e.g. English (US) or German (DE))
    - Type of experience: Other -> Custom
    - Hosting: "Provision your own"
    - Template: Start from Scratch
-3. In the left menu open Interaction Model -> JSON Editor. Delete what is there, paste the contents of `interaction-model.json`, click Save, then Build skill.
+2. In the left menu open Interaction Model -> JSON Editor. Delete what is there, paste the contents of `skill-package/interactionModels/custom/en-US.json`, click Save, then Build skill.
    - If your Echo runs in German, change the sample utterances to German equivalents ("frage {query}", "nach {query}" etc.) and keep the structure.
-4. Left menu -> Endpoint.
+3. Left menu -> Endpoint.
    - Select HTTPS.
    - Default Region: your tunnel URL including the path, e.g. `https://alexa.yourdomain.com/alexa`
    - SSL certificate type: "My development endpoint is a sub-domain of a domain that has a wildcard certificate from a certificate authority". (Cloudflare's cert qualifies.)
    - Save.
-5. Build the model again if prompted.
+4. Build the model again if prompted.
 
 ## 4. Test
 
@@ -96,6 +128,26 @@ The skill stays in development mode forever, that is fine for personal use. No c
 - Replies are stripped of markdown and shortened to spoken-friendly length. The full text always exists in the OpenClaw session.
 - The bridge verifies Amazon's request signature and timestamp, so random internet traffic to your tunnel URL cannot trigger your agent.
 - The bridge and the tunnel must be running for the skill to work. Consider registering both as services (systemd inside WSL, or Task Scheduler launching WSL on boot).
+
+## Going public later
+
+This skill is deliberately built for single-user, development-mode use — the
+endpoint is your own tunnel, and every request goes to your own OpenClaw
+agent. Opening it up to other users later would need real changes, not just
+flipping a flag:
+
+- A stable multi-tenant endpoint instead of a personal Cloudflare tunnel (e.g.
+  each user's skill instance pointing at their own bridge, or a hosted
+  service that routes by account).
+- Per-user auth/account linking, so one person's voice requests can't reach
+  another person's agent.
+- A privacy policy URL and completed `privacyAndCompliance` fields in
+  `skill-package/skill.json`.
+- Passing Amazon's certification review (`ask smapi submit-skill-for-certification-request`
+  or the console's Distribution tab).
+
+None of that is set up yet, and isn't needed for personal use — just keeping
+it in mind for when/if this becomes a shared project.
 
 ## Troubleshooting
 
