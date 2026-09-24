@@ -34,10 +34,13 @@ Not yet tested on real hardware, expect tuning:
 - mic capture, openWakeWord and faster-whisper on the Mac
 - macOS `say` voices, especially Yelda for Turkish (must be installed in System Settings, Accessibility, Spoken Content)
 - Android mic capture in Termux via `pulseaudio --load=module-sles-source` + `parec`. This is the least certain piece; it depends on Android granting Termux mic permission. The native app replaces it.
+- the Android app on a real phone: AudioRecord levels with VOICE_RECOGNITION, TextToSpeech voices for tr and de (Google TTS may need the voice data downloaded), whether the mic keeps running with the screen off for hours on his phone's battery management, and routing TTS to the Echo over Bluetooth
 - the real `claude` CLI flags: `--include-partial-messages`, `--tools ""`, `--system-prompt`, `--strict-mcp-config`, `--allowedTools mcp__voiceagent`. If the installed version rejects one, update Claude Code or adjust `llm.cli_args`.
 - Govee LAN discovery on his network
 
 The code lives on GitHub in `thebca/claude-for-alexa`, in the `voiceagent/` folder. The older Alexa to OpenClaw bridge (Node, `server.js`, `skill-package/`) stays at the repo root. Run the tests from `voiceagent/`.
+
+The Android satellite app is in `voiceagent/android/` (Kotlin, no AndroidX, only OkHttp). `.github/workflows/android.yml` at the repo root runs its unit tests, builds a release APK and publishes it as a GitHub release on every push that touches it. Main-branch builds are normal releases, other branches are pre-releases. Without the signing secrets (see `android/README.md`) builds are signed with a throwaway key. Its first real Android build happens in CI: cloud Claude Code sessions can't reach dl.google.com, so AGP and the SDK aren't available there. In that setup the app code was checked with a plain JVM Gradle project that compiles `app/src/main/java` against `org.robolectric:android-all` from Maven Central (with a stub R class) and runs the unit tests, plus a test running `SatelliteClient` against the real Python `Brain` with fake wake word, VAD, STT and agent. Both passed.
 
 ## File map
 
@@ -63,6 +66,17 @@ README.md         setup and usage, including Android/Termux steps
 ARCHITECTURE.md   product thinking, latency budget, protocol trade-offs, roadmap, open product questions
 config.example.yaml
 requirements.txt
+android/          native satellite app (see android/README.md)
+  app/src/main/java/com/voiceagent/satellite/
+    Protocol.kt         message parsing and building, constants (no Android APIs)
+    Voice.kt            speech queue that mutes the mic while speaking plus a tail (no Android APIs)
+    SatelliteClient.kt  OkHttp websocket client, mic pump, reconnect with backoff, stops on 4001 (no Android APIs)
+    StatusBus.kt        status line from the service to the screen (no Android APIs)
+    AndroidAudio.kt     AndroidMic (AudioRecord 16 kHz), AndroidTts (TextToSpeech per language), ToneChime
+    SatelliteService.kt foreground service (microphone type), wake and Wi-Fi locks, notification with Stop
+    MainActivity.kt     settings screen built in code: brain URL, token, room id, chime, start/stop, battery optimization
+    Settings.kt         SharedPreferences
+  app/src/test/   ProtocolTest, VoiceTest, SatelliteClientTest (MockWebServer as the brain)
 ```
 
 Websocket protocol (details in server.py): satellite sends hello with id and token, then binary 16 kHz mono int16 PCM frames of 80 ms, and `speech_done` after it finishes speaking a turn. Brain sends `wake`, `say` (text + lang), `turn_end`, `announce`, `conversation_end`. Wake word currently runs on the brain, so satellites stream continuously (about 32 KB/s); moving wake word onto the device later needs no protocol change.
@@ -70,7 +84,7 @@ Websocket protocol (details in server.py): satellite sends hello with id and tok
 ## Next steps, in the order agreed
 
 1. Done: pushed to GitHub as `voiceagent/` in `thebca/claude-for-alexa`.
-2. Native Android satellite app in Kotlin, installed by sideloading, no Play Store and no local build:
+2. Native Android satellite app in Kotlin, installed by sideloading, no Play Store and no local build. Built, waiting for its first CI build and a test on Berk's phone. Berk still needs to add the signing secrets once (commands in android/README.md). What it was built to:
    - GitHub Actions workflow builds a debug/release APK on every push and attaches it to a GitHub release
    - Berk installs it by downloading the APK on the phone and allowing "install unknown apps" once; Obtainium can auto-update from the private repo
    - app contents: settings screen (brain URL, token, room id), foreground service with microphone type and persistent notification (required by Android for always-on mic), AudioRecord at 16 kHz mono, websocket client speaking the same protocol, Android TextToSpeech per language, reconnect with backoff

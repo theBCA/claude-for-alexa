@@ -33,7 +33,13 @@ python -m voiceagent serve --token <long-secret>
 
 A Mac satellite on the same machine: `python -m voiceagent satellite --token <long-secret>`
 
+### Android phone as a satellite (app)
+
+The native app in `android/` is the recommended way. GitHub Actions builds the APK and puts it on the repo's Releases page, so installing it is a download on the phone. Setup is in [android/README.md](android/README.md).
+
 ### Android phone as a satellite (Termux)
+
+The older route, still useful for a quick test without installing anything.
 
 Install Termux and Termux:API from F-Droid (the Play Store versions are outdated). In Android settings, give Termux the microphone permission and turn off battery optimization for it. Then in Termux:
 
@@ -47,7 +53,7 @@ python -m voiceagent satellite --server ws://<mac-lan-ip>:8765 --id living-room 
     --token <long-secret> --mic command --tts termux
 ```
 
-Pair the phone to the Echo Dot over Bluetooth ("Alexa, pair") and replies play through it. To check the mic works before going further: `parec --raw --format=s16le --rate=16000 --channels=1 | head -c 64000 > /dev/null` should finish in about two seconds. If it hangs or the brain never hears the wake word, the mic permission is the usual cause. Termux is the quick route; a native Android app is the long-term one.
+Pair the phone to the Echo Dot over Bluetooth ("Alexa, pair") and replies play through it. To check the mic works before going further: `parec --raw --format=s16le --rate=16000 --channels=1 | head -c 64000 > /dev/null` should finish in about two seconds. If it hangs or the brain never hears the wake word, the mic permission is the usual cause.
 
 ## Single machine, step by step
 
