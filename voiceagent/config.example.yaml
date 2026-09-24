@@ -1,0 +1,38 @@
+# Copy to config.yaml and edit. Anything left out uses the defaults in voiceagent/config.py.
+
+assistant:
+  name: Jarvis
+  user_name: Berk
+  followup_seconds: 6
+  persona: >
+    You are warm, direct and a little dry-humored. You are happy to just chat,
+    not only take orders. Keep it natural, like a friend who happens to be very capable.
+
+wakeword:
+  model: hey_jarvis      # built-ins: hey_jarvis, alexa, hey_mycroft, hey_rhasspy
+  threshold: 0.5
+
+stt:
+  model: small           # "base" is faster, "medium" is more accurate for Turkish
+
+tts:
+  engine: say
+  voices: {en: Samantha, tr: Yelda, de: Anna}
+
+llm:
+  provider: anthropic                # or claude_cli: your own Pro/Max subscription, personal use only
+  model: claude-haiku-4-5-20251001   # API mode; try claude-sonnet-5 for smarter replies
+  cli_model: haiku                   # claude_cli mode: haiku, sonnet or opus
+
+tools:
+  govee:
+    devices: {}          # fill from `python -m voiceagent govee-discover`, e.g. {living room: 192.168.1.40}
+
+server:
+  port: 8765
+  token: change-me-to-something-long   # satellites must send the same token
+
+satellite:
+  server: ws://127.0.0.1:8765          # the brain's address; use the Mac's LAN IP from a phone
+  id: desk
+  token: change-me-to-something-long

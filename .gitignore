@@ -4,3 +4,7 @@ package-lock.json
 *.log
 .DS_Store
 .ask/
+__pycache__/
+*.pyc
+.venv/
+voiceagent/config.yaml
