@@ -206,6 +206,11 @@ class AdminServer:
 
         def restart():
             time.sleep(0.5)  # let the HTTP response go out first
+            if os.name == "nt":
+                import subprocess
+                subprocess.Popen([sys.executable, *sys.orig_argv[1:]], cwd=os.getcwd(),
+                                 creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+                os._exit(0)
             os.execv(sys.executable, [sys.executable, *sys.orig_argv[1:]])
 
         threading.Thread(target=restart, daemon=True).start()

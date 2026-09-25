@@ -90,8 +90,47 @@ def install_service() -> None:
         _install_launchd(python)
     elif platform.system() == "Linux":
         _install_systemd(python)
+    elif platform.system() == "Windows":
+        _install_task_scheduler(python)
     else:
-        raise SystemExit("install-service supports macOS and Linux; on Windows use Task Scheduler")
+        raise SystemExit("install-service supports macOS, Linux and Windows")
+
+
+# Runs at logon, restarts up to 999 times a minute apart, no time limit.
+_TASK_XML = """<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <Triggers><LogonTrigger><Enabled>true</Enabled><UserId>{user}</UserId></LogonTrigger></Triggers>
+  <Principals><Principal id="Author"><UserId>{user}</UserId><LogonType>InteractiveToken</LogonType></Principal></Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <RestartOnFailure><Interval>PT1M</Interval><Count>999</Count></RestartOnFailure>
+  </Settings>
+  <Actions Context="Author"><Exec><Command>{cmd}</Command><WorkingDirectory>{workdir}</WorkingDirectory></Exec></Actions>
+</Task>"""
+
+
+def _install_task_scheduler(python: Path) -> None:
+    import getpass
+
+    # pythonw.exe runs without a console window; fall back to python.exe
+    pyw = python.with_name("pythonw.exe")
+    exe = pyw if pyw.exists() else python
+    task = "VoiceagentBrain"
+    log = HOME / "brain.log"
+    # a .cmd wrapper keeps logs and gives Task Scheduler one stable command to run
+    wrapper = HOME / "run-brain.cmd"
+    wrapper.write_text(f'@echo off\r\ncd /d "{PROJECT}"\r\n"{exe}" -m voiceagent serve >> "{log}" 2>&1\r\n')
+    xml = HOME / "voiceagent-task.xml"
+    xml.write_text(_TASK_XML.format(user=getpass.getuser(), cmd=wrapper, workdir=PROJECT), encoding="utf-16")
+    subprocess.run(["schtasks", "/Create", "/TN", task, "/XML", str(xml), "/F"], check=True)
+    subprocess.run(["schtasks", "/Run", "/TN", task], check=True)
+    print(f"installed Task Scheduler job '{task}'.\nThe brain starts at logon and restarts if it crashes.")
+    print(f"  logs:   type {log}")
+    print(f"  stop:   schtasks /End /TN {task}")
+    print(f"  remove: schtasks /Delete /TN {task} /F")
 
 
 def _install_launchd(python: Path) -> None:

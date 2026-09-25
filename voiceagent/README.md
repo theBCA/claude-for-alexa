@@ -12,7 +12,25 @@ One command on macOS or Linux:
 ./install.sh
 ```
 
-It finds Python 3.11+, makes a venv, installs the dependencies, and writes a `config.yaml` with a random token. Then pick who pays for Claude in `config.yaml` (`llm.provider`), and check the machine:
+It finds Python 3.11+, makes a venv, installs the dependencies, and writes a `config.yaml` with a random token.
+
+### On Windows
+
+The brain runs natively on Windows (no WSL), which keeps it reachable from your phone on the LAN. In PowerShell, from the `voiceagent` folder:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File install.ps1
+.\.venv\Scripts\python.exe -m voiceagent doctor
+.\.venv\Scripts\python.exe -m voiceagent serve
+```
+
+Install Python 3.11+ (tick "Add to PATH") and, for `claude_cli` mode, Claude Code. When Windows Firewall asks the first time, allow Python so the phone can connect. To start it at logon and restart it on crash:
+
+```powershell
+.\.venv\Scripts\python.exe -m voiceagent install-service
+```
+
+The phone then points at `ws://<windows-lan-ip>:8765` (find it with `ipconfig`). Then pick who pays for Claude in `config.yaml` (`llm.provider`), and check the machine:
 
 ```bash
 ./.venv/bin/python -m voiceagent doctor
