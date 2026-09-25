@@ -22,6 +22,7 @@ def main() -> None:
                                         "audio-devices"])
     p.add_argument("-c", "--config", help="path to config.yaml")
     p.add_argument("--speak", action="store_true", help="chat mode: also speak replies")
+    p.add_argument("--password", action="store_true", help="roborock-login: use your password instead of an email code")
     p.add_argument("-v", "--verbose", action="store_true")
     sat = p.add_argument_group("satellite options (override config.yaml)")
     sat.add_argument("--server", help="brain address, e.g. ws://192.168.1.20:8765")
@@ -71,8 +72,10 @@ def main() -> None:
         for d in found:
             print(f"{d['ip']:16} {d['sku']:10} {d['device']}")
     elif args.command == "roborock-login":
+        import getpass
         from .tools.roborock import CREDENTIALS, login
-        login(input("Roborock account email: ").strip())
+        email = input("Roborock account email: ").strip()
+        login(email, getpass.getpass("Roborock password: ") if args.password else None)
         print(f"Saved to {CREDENTIALS}. Restart the brain and ask Jarvis about the vacuum.")
     elif args.command == "chat":
         chat(cfg, args.speak)
