@@ -1,8 +1,9 @@
-"""Google Calendar and Gmail through Google's REST APIs, with your own OAuth client.
+"""Google Calendar, Gmail, Tasks and Contacts through Google's REST APIs, with your own OAuth client.
 
 Setup once (details in README.md):
-  1. In Google Cloud Console create a project, enable the Google Calendar API and
-     the Gmail API, and create an OAuth client of type "Desktop app". Download its JSON.
+  1. In Google Cloud Console create a project, enable the Google Calendar, Gmail,
+     Google Tasks and People APIs, and create an OAuth client of type "Desktop app".
+     Download its JSON.
   2. python -m voiceagent google-login path/to/client_secret.json
 Tokens go to ~/.voiceagent/google.json (mode 600) and refresh themselves.
 
@@ -38,11 +39,14 @@ log = logging.getLogger(__name__)
 
 CREDENTIALS = Path("~/.voiceagent/google.json").expanduser()
 SCOPES = ("https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly "
-          "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.compose")
+          "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.compose "
+          "https://www.googleapis.com/auth/tasks https://www.googleapis.com/auth/contacts.readonly")
 AUTH = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN = "https://oauth2.googleapis.com/token"
 CAL = "https://www.googleapis.com/calendar/v3"
 GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me"
+TASKS = "https://tasks.googleapis.com/tasks/v1"
+PEOPLE = "https://people.googleapis.com/v1"
 
 
 class GoogleError(Exception):
@@ -237,6 +241,66 @@ class Google:
         return f"ok: draft to {to} saved in Gmail"
 
 
+class GoogleMore(Google):
+    """Tasks and contacts, kept apart from the calendar and mail code above."""
+
+    # ---------------------------------------------------------------- tasks
+    def tasks(self, include_done: bool = False) -> list[str]:
+        items = (self.api("GET", f"{TASKS}/lists/@default/tasks",
+                          {"showCompleted": str(include_done).lower(), "maxResults": 50}) or {}).get("items", [])
+        out = []
+        for t in items:
+            due = f" (due {t['due'][:10]})" if t.get("due") else ""
+            done = " [done]" if t.get("status") == "completed" else ""
+            out.append(f"{t.get('title', '(untitled)')}{due}{done} [id {t['id']}]")
+        return out
+
+    def add_task(self, title: str, due: str | None = None, notes: str | None = None) -> str:
+        body = {"title": title}
+        if due:
+            body["due"] = due[:10] + "T00:00:00.000Z"  # Google Tasks keeps only the date
+        if notes:
+            body["notes"] = notes
+        t = self.api("POST", f"{TASKS}/lists/@default/tasks", body=body) or {}
+        return f"ok: added '{title}' [id {t.get('id')}]"
+
+    def _find_task(self, task: str) -> dict | None:
+        items = (self.api("GET", f"{TASKS}/lists/@default/tasks", {"showCompleted": "false", "maxResults": 100})
+                 or {}).get("items", [])
+        return next((t for t in items if t["id"] == task), None) or next(
+            (t for t in items if task.lower() in t.get("title", "").lower()), None)
+
+    def complete_task(self, task: str) -> str:
+        t = self._find_task(task)
+        if not t:
+            return f"error: no open task matching '{task}'"
+        self.api("PATCH", f"{TASKS}/lists/@default/tasks/{t['id']}", body={"status": "completed"})
+        return f"ok: '{t['title']}' done"
+
+    def delete_task(self, task: str) -> str:
+        t = self._find_task(task)
+        if not t:
+            return f"error: no open task matching '{task}'"
+        self.api("DELETE", f"{TASKS}/lists/@default/tasks/{t['id']}")
+        return f"ok: deleted '{t['title']}'"
+
+    # ------------------------------------------------------------- contacts
+    def contacts(self, query: str) -> list[dict]:
+        # Google asks for one empty search first to warm its cache, otherwise results can be empty
+        if not getattr(self, "_contacts_warm", False):
+            self.api("GET", f"{PEOPLE}/people:searchContacts", {"query": "", "readMask": "names"})
+            self._contacts_warm = True
+        res = self.api("GET", f"{PEOPLE}/people:searchContacts",
+                       {"query": query, "readMask": "names,phoneNumbers,emailAddresses", "pageSize": 5}) or {}
+        out = []
+        for r in res.get("results", []):
+            p = r.get("person", {})
+            out.append({"name": (p.get("names") or [{}])[0].get("displayName", "?"),
+                        "phones": [n.get("canonicalForm") or n.get("value") for n in p.get("phoneNumbers", [])],
+                        "emails": [e.get("value") for e in p.get("emailAddresses", [])]})
+        return out
+
+
 def _body_text(part: dict) -> str:
     """Plain text of a Gmail payload: text/plain if there is one, else HTML with tags stripped."""
     mime, data = part.get("mimeType", ""), part.get("body", {}).get("data")
@@ -262,7 +326,8 @@ def _body_text(part: dict) -> str:
 def register_google_tools(reg: ToolRegistry) -> bool:
     if not CREDENTIALS.exists():
         return False
-    g = Google(json.loads(CREDENTIALS.read_text()))
+    g = GoogleMore(json.loads(CREDENTIALS.read_text()))
+    reg.ctx["google"] = g  # other tools (messages) look contacts up through it
 
     def safe(fn):
         try:
@@ -337,5 +402,43 @@ def register_google_tools(reg: ToolRegistry) -> bool:
                 return "error: needs a recipient email address"
             return safe(lambda: g.compose(to, subject or "", body or "", send=action == "send"))
         return f"error: unknown action {action}"
+
+    @reg.register(
+        "tasks",
+        "The user's Google Tasks: reminders, to-dos and the shopping list. 'list' shows open tasks, 'add' creates "
+        "one (optional 'due' as YYYY-MM-DD), 'complete' and 'delete' take the task's id or a word from its title. "
+        "For a reminder at a specific time today, use set_timer instead or as well.",
+        {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["list", "add", "complete", "delete"]},
+                "title": {"type": "string"},
+                "due": {"type": "string"},
+                "notes": {"type": "string"},
+                "task": {"type": "string", "description": "id or part of the title"},
+                "include_done": {"type": "boolean"},
+            },
+            "required": ["action"],
+        },
+    )
+    def tasks(ctx, action: str, title=None, due=None, notes=None, task=None, include_done=False):
+        if action == "list":
+            return safe(lambda: g.tasks(include_done) or "no open tasks")
+        if action == "add":
+            return safe(lambda: g.add_task(title, due, notes)) if title else "error: add needs a title"
+        if action in ("complete", "delete"):
+            if not task:
+                return f"error: {action} needs a task"
+            return safe(lambda: g.complete_task(task) if action == "complete" else g.delete_task(task))
+        return f"error: unknown action {action}"
+
+    @reg.register(
+        "contacts",
+        "Look up someone in the user's Google Contacts by name to get their phone number or email, "
+        "for example before writing an email or sending a message.",
+        {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
+    )
+    def contacts(ctx, query: str):
+        return safe(lambda: g.contacts(query) or f"no contact matching '{query}'")
 
     return True

@@ -8,7 +8,12 @@
   python -m voiceagent roborock-login  link your Roborock account once (email code)
   python -m voiceagent spotify-login   link Spotify once (needs a Client ID from developer.spotify.com)
   python -m voiceagent google-login F  link Google Calendar and Gmail once (F = OAuth client JSON)
+  python -m voiceagent lepro-login     link Lepro lights (reads LEPRO_* from voiceagent/.env)
   python -m voiceagent audio-devices   list mics and speakers
+  python -m voiceagent doctor          check the setup on this machine
+  python -m voiceagent backup F        bundle config + credentials to move machines
+  python -m voiceagent restore F       unpack a bundle on a new machine
+  python -m voiceagent install-service start the brain automatically on login
 """
 from __future__ import annotations
 
@@ -21,8 +26,9 @@ from .config import load_config
 def main() -> None:
     p = argparse.ArgumentParser(prog="voiceagent")
     p.add_argument("command", choices=["serve", "satellite", "run", "chat", "govee-discover", "roborock-login",
-                                        "spotify-login", "google-login", "audio-devices"])
-    p.add_argument("file", nargs="?", help="google-login: the OAuth client JSON from Google Cloud Console")
+                                        "spotify-login", "google-login", "lepro-login", "audio-devices", "doctor", "backup", "restore",
+                                        "install-service"])
+    p.add_argument("file", nargs="?", help="path argument for google-login / backup / restore")
     p.add_argument("-c", "--config", help="path to config.yaml")
     p.add_argument("--speak", action="store_true", help="chat mode: also speak replies")
     p.add_argument("--password", action="store_true", help="roborock-login: use your password instead of an email code")
@@ -47,6 +53,23 @@ def main() -> None:
     if args.token:
         cfg["server"]["token"] = args.token
 
+    if args.command == "doctor":
+        from .doctor import run
+        raise SystemExit(run(cfg))
+    if args.command == "backup":
+        from .ops import backup
+        backup(args.file or "voiceagent-backup.tgz")
+        return
+    if args.command == "restore":
+        from .ops import restore
+        if not args.file:
+            raise SystemExit("usage: python -m voiceagent restore voiceagent-backup.tgz")
+        restore(args.file)
+        return
+    if args.command == "install-service":
+        from .ops import install_service
+        install_service()
+        return
     if args.command == "serve":
         import asyncio
         from .server import Brain
@@ -80,6 +103,14 @@ def main() -> None:
         email = input("Roborock account email: ").strip()
         login(email, getpass.getpass("Roborock password: ") if args.password else None)
         print(f"Saved to {CREDENTIALS}. Restart the brain and ask Jarvis about the vacuum.")
+    elif args.command == "lepro-login":
+        from pathlib import Path as _P
+        from .tools.lepro import CREDENTIALS as LEPRO_CREDENTIALS, LeproError, login as lepro_login
+        try:
+            lepro_login(_P(__file__).resolve().parent.parent / ".env")
+        except LeproError as e:
+            raise SystemExit(f"Lepro login failed: {e}")
+        print(f"Saved to {LEPRO_CREDENTIALS}. Restart the brain and ask about the Lepro lights.")
     elif args.command == "google-login":
         from .tools.google import CREDENTIALS as GOOGLE_CREDENTIALS, login as google_login
         if not args.file:

@@ -8,3 +8,4 @@ onnxruntime>=1.16
 faster-whisper>=1.0.3
 websockets>=12
 python-roborock>=7.9
+paho-mqtt>=2.1

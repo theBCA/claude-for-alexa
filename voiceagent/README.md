@@ -4,13 +4,27 @@ A local-first voice assistant you can actually talk to. Custom wake word, Claude
 
 It runs as two parts. The brain (`serve`) does speech recognition, Claude, memory and tools. Satellites (`satellite`) are the mics and speakers in each room: an Android phone, a Mac, a Raspberry Pi. Any speaker works, including an Echo Dot paired over Bluetooth to a satellite.
 
-## Setup (macOS, Python 3.11 recommended)
+## Setup
+
+One command on macOS or Linux:
+
+```bash
+./install.sh
+```
+
+It finds Python 3.11+, makes a venv, installs the dependencies, and writes a `config.yaml` with a random token. Then pick who pays for Claude in `config.yaml` (`llm.provider`), and check the machine:
+
+```bash
+./.venv/bin/python -m voiceagent doctor
+```
+
+`doctor` prints one line per part of the setup (Claude login, speech model, device logins, ports) and the address satellites should use. Manual setup, if you prefer:
 
 ```bash
 python3.11 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp config.example.yaml config.yaml
-export ANTHROPIC_API_KEY=sk-ant-...
+export ANTHROPIC_API_KEY=sk-ant-...   # only for llm.provider: anthropic
 ```
 
 Pair the Echo Dot: say "Alexa, pair", then pick it in macOS Bluetooth settings and set it as the sound output. The first `run` downloads the wake word and Whisper models (a few hundred MB).
@@ -84,9 +98,33 @@ Roborock vacuums: run `python -m voiceagent roborock-login` once. It emails you 
 
 Spotify (needs Premium): create an app at developer.spotify.com/dashboard with the Web API and the redirect URI `http://127.0.0.1:8888/callback`, then run `python -m voiceagent spotify-login` and paste its Client ID. Ask in any language ("Tarkan'dan Şımarık'ı aç", "spiel Rammstein", "play something calm for dinner"); it plays on whichever Spotify device is active, or on `tools.spotify.device`. Music is turned down while you talk to Jarvis and comes back after.
 
-Google Calendar and Gmail: in [Google Cloud Console](https://console.cloud.google.com/) create a project, enable the Google Calendar API and the Gmail API, set up the OAuth consent screen (External, add yourself as a test user, then "Publish app" so the login doesn't expire every 7 days), and create an OAuth client of type "Desktop app". Download its JSON and run `python -m voiceagent google-login ~/Downloads/client_secret_....json`. Then: "what's on my calendar tomorrow", "put dentist on Friday at 3", "any new mail from Anna?". Jarvis saves emails as drafts unless you confirm sending after it reads them back.
+Google Calendar and Gmail: in [Google Cloud Console](https://console.cloud.google.com/) create a project, enable the Google Calendar API and the Gmail API, set up the OAuth consent screen (External, add yourself as a test user, then "Publish app" so the login doesn't expire every 7 days), and create an OAuth client of type "Desktop app". Download its JSON and run `python -m voiceagent google-login ~/Downloads/client_secret_....json`. Then: "what's on my calendar tomorrow", "put dentist on Friday at 3", "any new mail from Anna?". Jarvis saves emails as drafts unless you confirm sending after it reads them back. The same login covers Google Tasks ("add milk to my list", "what's on my to-do list") and looks up phone numbers and emails in your Google Contacts.
+
+Lepro lights (the Lepro / LampUX app): these have no local control, so it goes through Lepro's cloud. Put `LEPRO_EMAIL` and `LEPRO_PASSWORD` in `.env`, place the app's TLS key at `~/.voiceagent/lepro_client_key.pem`, and run `python -m voiceagent lepro-login`. Then "turn the Lepro lights warm" works like the Govee ones.
 
 Anything with an MCP server (calendar, Spotify, Home Assistant) can be added under `llm.mcp_servers` in claude_cli mode, and web search is on by default.
+
+## Moving to another machine
+
+Everything that makes an install unique is in three places: `config.yaml`, `.env`, and `~/.voiceagent/` (device logins, the speech memory, the Lepro key). To move to another Mac, mini PC or Raspberry Pi:
+
+```bash
+# on the old machine
+python -m voiceagent backup voiceagent-backup.tgz
+# copy the file over, then on the new machine after ./install.sh
+python -m voiceagent restore voiceagent-backup.tgz
+python -m voiceagent doctor
+```
+
+The backup carries the Spotify, Google, Roborock and Lepro logins. On macOS the Claude subscription login is kept in the system keychain, not in the backup, so run `claude auth login` once on the new machine (with `CLAUDE_CONFIG_DIR` if you use a separate account). On Linux, set `tts.engine: piper` since `say` is macOS only; the brain itself runs the same everywhere.
+
+To start the brain automatically and keep it running:
+
+```bash
+python -m voiceagent install-service
+```
+
+This installs a launchd agent on macOS or a systemd user service on Linux, so the brain starts at login and restarts if it crashes. Satellites reconnect on their own.
 
 ## Things to say
 
@@ -110,6 +148,8 @@ voiceagent/
   memory.py       SQLite: short-term conversation, long-term facts
   tools/          one file per capability (core.py, govee.py, roborock.py, spotify.py, google.py)
   admin.py        admin web UI and its JSON API (admin.html is the page)
+  doctor.py       `doctor` setup check; ops.py: backup, restore, install-service
+  install.sh      one-command setup
 tests/            python -m unittest discover -s tests
 ```
 

@@ -41,6 +41,8 @@ tools:
   spotify:
     device: null         # default Spotify Connect device, e.g. "Galaxy" or "Echo"; null = the active one
     duck_volume: 20      # music volume while you talk to the assistant; 0 = off
+  # google: calendar, gmail, tasks, contacts  -> python -m voiceagent google-login <client.json>
+  # lepro:  lights via Lepro cloud            -> LEPRO_* in .env, then python -m voiceagent lepro-login
 
 server:
   port: 8765

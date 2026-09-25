@@ -109,6 +109,8 @@ DEFAULTS: dict[str, Any] = {
         "roborock": {"enabled": True},
         # Google Calendar and Gmail, active once `python -m voiceagent google-login client_secret.json` ran
         "google": {"enabled": True},
+        # Lepro lights via Lepro's cloud, active once `python -m voiceagent lepro-login` ran
+        "lepro": {"enabled": True},
         # active once `python -m voiceagent spotify-login` has saved a token (needs Spotify Premium)
         "spotify": {
             "enabled": True,

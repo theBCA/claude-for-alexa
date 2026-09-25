@@ -164,7 +164,8 @@ class Spotify:
         return next((d for d in devices if d.get("is_active")), devices[0])
 
     def search(self, query: str, kind: str, limit: int = 5) -> list[dict]:
-        res = self.api("GET", "/search", {"q": query, "type": kind, "limit": limit, "market": "from_token"})
+        # no market=from_token: it needs the user-read-private scope; the user's token sets the market anyway
+        res = self.api("GET", "/search", {"q": query, "type": kind, "limit": limit})
         items = [i for i in (res or {}).get(f"{kind}s", {}).get("items", []) if i]
         out = []
         for i in items:

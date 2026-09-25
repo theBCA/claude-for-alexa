@@ -10,6 +10,7 @@ import logging
 import re
 import threading
 import time
+from pathlib import Path
 
 from .agent import make_agent
 from .audio import MicStream, SpeechToText, WakeWord, record_utterance
@@ -20,9 +21,13 @@ from .tools.core import register_core_tools
 from .tools.govee import register_govee_tools
 from .tools.roborock import register_roborock_tools
 from .tools.google import register_google_tools
+from .tools.lepro import register_lepro_tools
 from .tools.spotify import register_spotify_tools
 
 log = logging.getLogger(__name__)
+
+# voiceagent/.env, next to config.yaml, holds secrets like the Lepro password
+ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
 
 # Whisper hallucinates these on silence or noise.
 NOISE = {"", "you", "thank you.", "thanks for watching!", "altyazı m.k.", "..."}
@@ -41,6 +46,8 @@ def build_tools(cfg, memory: Memory) -> ToolRegistry:
         log.info("spotify: enabled")
     if cfg.tools.google.enabled and register_google_tools(reg):
         log.info("google calendar and gmail: enabled")
+    if cfg.tools.lepro.enabled and register_lepro_tools(reg, ENV_PATH):
+        log.info("lepro lights: enabled")
     return reg
 
 
