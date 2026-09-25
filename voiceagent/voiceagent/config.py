@@ -66,6 +66,7 @@ DEFAULTS: dict[str, Any] = {
         "cli_path": "claude",
         "cli_model": "haiku",
         "cli_args": [],           # extra flags for the claude CLI
+        "cli_session_idle_s": 900,  # keep the CLI session this long after the last turn (fast replies vs ~200 MB)
         "cli_thinking": False,    # extended thinking: smarter on hard questions, ~0.7 s slower to start talking
         # Your own MCP servers (claude_cli mode), same format as Claude Code's "mcpServers":
         # {"home": {"command": "npx", "args": ["-y", "some-mcp-server"]}} or {"x": {"type": "http", "url": "..."}}

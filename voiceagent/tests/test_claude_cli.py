@@ -33,24 +33,30 @@ class TestClaudeCLI(unittest.TestCase):
         self.assertIn("Tools: forget,remember,settimer.", reply)  # underscores are stripped for speech
         self.assertIn("Turkish=True", reply)
         self.assertTrue(self.mem.facts()[0].startswith("prompt-len="))  # tool ran in the brain process
+        agent.close()
 
-    def test_prewarmed_process_is_used(self):
+    def test_session_is_reused_across_turns(self):
         agent = make_agent(self.cfg, self.reg, self.mem)
         agent.prewarm()
-        warm = agent._warm[0]
+        a, b = [], []
+        agent.respond("first thing", a.append, lang="en")
+        agent.respond("second thing", b.append, lang="tr")
+        pid = lambda spoken: " ".join(spoken).split("Pid=")[1]  # noqa: E731
+        self.assertEqual(pid(a), pid(b))                       # same CLI process both turns
+        self.assertIn("History=False", " ".join(b))           # the session already has the context
+        self.assertIn("Turkish=True", " ".join(b))
+        agent.close()
+
+    def test_new_session_gets_history_and_close_stops_process(self):
+        agent = make_agent(self.cfg, self.reg, self.mem)
+        agent.respond("first thing", lambda s: None, lang="en")
+        proc = agent._session.proc
+        agent.close()
+        proc.wait(timeout=5)
         spoken = []
-        agent.respond("remember I like tea", spoken.append, lang="tr")
-        self.assertIsNone(agent._warm)
-        self.assertEqual(warm.returncode, 0)  # the reply came from the prewarmed process
-        self.assertIn("Turkish=True", " ".join(spoken))
-
-    def test_cancel_prewarm_stops_process(self):
-        agent = make_agent(self.cfg, self.reg, self.mem)
-        agent.prewarm()
-        warm = agent._warm[0]
-        agent.cancel_prewarm()
-        warm.wait(timeout=5)
-        self.assertIsNone(agent._warm)
+        agent.respond("second thing", spoken.append, lang="en")
+        self.assertIn("History=True", " ".join(spoken))       # restarted session replays recent turns
+        agent.close()
 
     def test_command_flags(self):
         self.cfg["llm"]["mcp_servers"] = {"home": {"command": "home-mcp"}}
@@ -66,9 +72,10 @@ class TestClaudeCLI(unittest.TestCase):
                 {"role": "user", "content": "lights off"}]
         p = format_prompt(hist, "lights off")
         self.assertIn("User: hi\nYou: hello", p)
-        self.assertTrue(p.endswith("The user now says:\nlights off"))
-        self.assertEqual(format_prompt(hist[:1], "hi"), "hi")
+        self.assertIn("The user now says:\nlights off\n\n(Local time", p)
+        self.assertTrue(format_prompt(hist[:1], "hi").startswith("hi\n\n(Local time"))
         self.assertTrue(format_prompt(hist[:1], "selam", "tr").endswith("Reply in Turkish.)"))
+        self.assertIn("Local time", format_prompt(hist[:1], "hi"))
 
 
 if __name__ == "__main__":

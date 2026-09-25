@@ -10,12 +10,17 @@ That way timers, memory and announcements behave exactly like API mode.
 
 Only for you, on your machine. Anything other people use goes through API keys.
 
-Latency: the CLI takes about half a second to start plus MCP setup. The brain
-calls prewarm() at the wake word, so the process boots while the user is still
-talking and only waits for the prompt on stdin. Extended thinking is off
-(llm.cli_thinking) since it delays the first word by most of a second. The CLI also runs with
---setting-sources "" from ~/.voiceagent, so your own Claude Code hooks, plugins
-and CLAUDE.md files don't load into the voice assistant.
+Latency: one CLI process stays alive across turns (--input-format stream-json),
+so a reply only waits for the model: first token in about 0.6 s instead of 1.3 to
+2 s for a fresh `claude -p` per turn, which only initialises after it has read
+its prompt. The session is started at the wake word if none is running, and is
+replaced after llm.cli_session_idle_s of silence (frees ~200 MB), after
+llm.history_turns turns, or when it dies. A new session gets the recent
+conversation from memory in its first message, so nothing is lost.
+
+Extended thinking is off (llm.cli_thinking) since it delays the first word by
+most of a second. The CLI runs with --setting-sources "" from ~/.voiceagent, so
+your own Claude Code hooks, plugins and CLAUDE.md files don't load into it.
 """
 from __future__ import annotations
 
@@ -40,7 +45,6 @@ from .tools import ToolRegistry
 log = logging.getLogger(__name__)
 
 PACKAGE_PARENT = str(Path(__file__).resolve().parent.parent)
-WARM_MAX_AGE_S = 120  # a prewarmed process older than this has a stale clock and memory in its prompt
 WEB_TOOLS = ["WebSearch", "WebFetch"]
 
 
@@ -91,26 +95,45 @@ class ToolRelay:
 
 
 def format_prompt(history: list[dict], user_text: str, lang: str | None = None) -> str:
-    """The CLI call is stateless, so earlier turns go into the prompt as a transcript.
-    The reply language goes here rather than in the system prompt, which is fixed at prewarm time."""
+    """First message of a session: earlier turns go in as a transcript, since the session starts empty.
+    The reply language and the time go in every message; the system prompt is fixed when the session starts."""
     earlier = history[:-1] if history and history[-1]["role"] == "user" else history
-    note = f"\n\n(The user spoke {LANG_NAMES[lang]}. Reply in {LANG_NAMES[lang]}.)" if lang in LANG_NAMES else ""
     if not earlier:
-        return user_text + note
+        return user_text + turn_note(lang)
     lines = [f"{'User' if m['role'] == 'user' else 'You'}: {m['content']}" for m in earlier]
-    return "Conversation so far:\n" + "\n".join(lines) + f"\n\nThe user now says:\n{user_text}" + note
+    return "Conversation so far:\n" + "\n".join(lines) + f"\n\nThe user now says:\n{user_text}" + turn_note(lang)
+
+
+def turn_note(lang: str | None) -> str:
+    note = f"(Local time {time.strftime('%H:%M')}."
+    if lang in LANG_NAMES:
+        note += f" The user spoke {LANG_NAMES[lang]}. Reply in {LANG_NAMES[lang]}."
+    return "\n\n" + note + ")"
 
 
 def _stop(proc: subprocess.Popen) -> None:
-    """SIGTERM so the CLI shuts its MCP servers down too, reaped in the background."""
+    """Close stdin (the CLI exits cleanly and stops its MCP servers), then make sure, in the background."""
     def reap():
-        proc.terminate()
+        try:
+            proc.stdin.close()
+        except (OSError, ValueError):
+            pass
         try:
             proc.wait(timeout=3)
         except subprocess.TimeoutExpired:
             proc.kill()
             proc.wait()
     threading.Thread(target=reap, daemon=True).start()
+
+
+class _Session:
+    def __init__(self, proc: subprocess.Popen):
+        self.proc = proc
+        self.last_used = time.monotonic()
+        self.turns = 0
+
+    def alive(self) -> bool:
+        return self.proc.poll() is None
 
 
 class ClaudeCLIAgent:
@@ -137,15 +160,17 @@ class ClaudeCLIAgent:
             os.chmod(self.mcp_config, 0o600)
         self.workdir = Path(os.path.expanduser(cfg.memory.path)).parent
         self.workdir.mkdir(parents=True, exist_ok=True)
-        self._warm: tuple[subprocess.Popen, float] | None = None
-        self._warm_lock = threading.Lock()
+        self._session: _Session | None = None
+        self._session_lock = threading.Lock()   # guards self._session
+        self._turn_lock = threading.Lock()      # one turn at a time per session
+        threading.Thread(target=self._reaper, daemon=True, name="cli-reaper").start()
 
     def command(self, system: str) -> list[str]:
         llm = self.cfg.llm
         builtin = WEB_TOOLS if llm.web_search else []
-        cmd = [self.cli, "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
-               "--model", llm.cli_model, "--system-prompt", system, "--setting-sources", "",
-               "--tools", ",".join(builtin)]
+        cmd = [self.cli, "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
+               "--include-partial-messages", "--model", llm.cli_model, "--system-prompt", system,
+               "--setting-sources", "", "--tools", ",".join(builtin)]
         allowed = builtin + [f"mcp__{name}" for name in self.mcp_servers]
         if self.mcp_config:
             cmd += ["--mcp-config", self.mcp_config, "--strict-mcp-config"]
@@ -153,45 +178,69 @@ class ClaudeCLIAgent:
             cmd += ["--allowedTools", *allowed]
         return cmd + list(llm.cli_args or [])
 
-    def _spawn(self) -> subprocess.Popen:
+    def _spawn(self) -> _Session:
         env = dict(os.environ)
         env.pop("ANTHROPIC_API_KEY", None)  # otherwise the CLI bills the API instead of your subscription
         if not self.cfg.llm.cli_thinking:
             env["MAX_THINKING_TOKENS"] = "0"  # extended thinking costs ~0.7 s before the first word
-        return subprocess.Popen(self.command(build_system_prompt(self.cfg, self.memory, None)),
-                                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                text=True, env=env, cwd=self.workdir)
+        # stderr to a file: a long-lived process would block once a pipe nobody reads fills up
+        errlog = open(self.workdir / "claude-cli.log", "a")
+        proc = subprocess.Popen(self.command(build_system_prompt(self.cfg, self.memory, None)),
+                                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=errlog,
+                                text=True, bufsize=1, env=env, cwd=self.workdir)
+        errlog.close()
+        log.info("claude session started (pid %s)", proc.pid)
+        return _Session(proc)
+
+    def _current(self) -> tuple[_Session, bool]:
+        """The live session, or a new one. Returns (session, is_new)."""
+        with self._session_lock:
+            s = self._session
+            if s and s.alive() and s.turns < self.cfg.llm.history_turns:
+                return s, s.turns == 0
+            if s:
+                _stop(s.proc)
+            self._session = self._spawn()
+            return self._session, True
 
     def prewarm(self) -> None:
-        """Boot a CLI process that waits for its prompt, so the next reply skips the startup."""
-        with self._warm_lock:
-            warm = self._warm
-            if warm and warm[0].poll() is None and time.monotonic() - warm[1] < WARM_MAX_AGE_S:
-                return
-            self._warm = (self._spawn(), time.monotonic())
-        if warm:
-            _stop(warm[0])
+        """Called at the wake word: make sure a session is booting while the user talks."""
+        self._current()
 
-    def cancel_prewarm(self) -> None:
-        with self._warm_lock:
-            warm, self._warm = self._warm, None
-        if warm:
-            _stop(warm[0])
+    def close(self) -> None:
+        with self._session_lock:
+            s, self._session = self._session, None
+        if s:
+            _stop(s.proc)
 
-    def _take_process(self) -> subprocess.Popen:
-        with self._warm_lock:
-            warm, self._warm = self._warm, None
-        if warm and warm[0].poll() is None and time.monotonic() - warm[1] < WARM_MAX_AGE_S:
-            return warm[0]
-        if warm:
-            _stop(warm[0])
-        return self._spawn()
+    def _reaper(self) -> None:
+        while True:
+            time.sleep(15)
+            with self._session_lock:
+                s = self._session
+                idle = s and time.monotonic() - s.last_used > self.cfg.llm.cli_session_idle_s
+                if s and (idle or not s.alive()) and not self._turn_lock.locked():
+                    self._session = None
+                    _stop(s.proc)
+                    log.info("claude session closed (%s)", "idle" if s.alive() else "exited")
 
     def respond(self, user_text: str, on_sentence: Callable[[str], None], lang: str | None = None) -> str:
+        with self._turn_lock:
+            try:
+                return self._respond(user_text, on_sentence, lang)
+            except Exception:
+                self.close()  # never reuse a session in an unknown state
+                raise
+
+    def _respond(self, user_text: str, on_sentence: Callable[[str], None], lang: str | None) -> str:
         llm = self.cfg.llm
         self.memory.add_turn("user", user_text)
-        history = self.memory.recent_messages(llm.history_turns, llm.history_max_age_hours)
-        prompt = format_prompt(history, user_text, lang)
+        session, new = self._current()
+        if new:
+            history = self.memory.recent_messages(llm.history_turns, llm.history_max_age_hours)
+            prompt = format_prompt(history, user_text, lang)
+        else:
+            prompt = user_text + turn_note(lang)
 
         spoken: list[str] = []
         splitter = SentenceSplitter()
@@ -203,14 +252,15 @@ class ClaudeCLIAgent:
                     spoken.append(s)
                     on_sentence(s)
 
-        proc = self._take_process()
+        proc = session.proc
         timer = threading.Timer(llm.cli_timeout_s, proc.kill)
         timer.start()
+        error, finished = None, False
         try:
-            proc.stdin.write(prompt)
-            proc.stdin.close()
-            saw_delta, error = False, None
-            for line in proc.stdout:
+            proc.stdin.write(json.dumps({"type": "user", "message": {"role": "user", "content": prompt}}) + "\n")
+            proc.stdin.flush()
+            saw_delta = False
+            for line in proc.stdout:  # until this turn's "result"; the process stays up for the next turn
                 try:
                     ev = json.loads(line)
                 except ValueError:
@@ -227,16 +277,24 @@ class ClaudeCLIAgent:
                     for block in ev.get("message", {}).get("content", []):
                         if block.get("type") == "text":
                             emit(splitter.feed(block["text"] + "\n"))
-                elif kind == "result" and ev.get("is_error"):
-                    error = ev.get("result") or "claude CLI reported an error"
+                elif kind == "result":
+                    finished = True
+                    if ev.get("is_error"):
+                        error = ev.get("result") or "claude CLI reported an error"
+                    break
             emit(splitter.flush())
-            proc.wait()
-            stderr = proc.stderr.read()
+        except (BrokenPipeError, OSError) as e:
+            error = f"claude session broke: {e}"
         finally:
             timer.cancel()
+        session.turns += 1
+        session.last_used = time.monotonic()
 
+        if not finished or error:
+            self.close()
         if not spoken:
-            raise RuntimeError(error or stderr.strip() or f"claude CLI exited with {proc.returncode}")
+            raise RuntimeError(error or f"claude CLI ended without a reply (exit {proc.poll()}), "
+                               f"see {self.workdir / 'claude-cli.log'}")
         reply = " ".join(spoken)
         self.memory.add_turn("assistant", reply)
         return reply

@@ -79,7 +79,6 @@ class Session:
     def _end(self, notify: bool = True) -> None:
         self.state, self.collector = "idle", None
         self.wake.reset()
-        self.brain.cancel_prewarm()
         if notify:
             self.outbox.put_nowait({"type": "conversation_end"})
         self.brain.fire("on_conversation_end")
@@ -210,15 +209,10 @@ class Brain:
             threading.Thread(target=fn, daemon=True).start()
 
     def prewarm(self) -> None:
-        """Start the next agent call while the user is still talking (claude_cli: hides CLI startup)."""
+        """Get the agent ready while the user is still talking (claude_cli: boots the CLI session)."""
         fn = getattr(self.agent, "prewarm", None)
         if fn:
             threading.Thread(target=fn, daemon=True).start()
-
-    def cancel_prewarm(self) -> None:
-        fn = getattr(self.agent, "cancel_prewarm", None)
-        if fn:
-            fn()
 
     def transcribe(self, pcm: bytes):
         with self._stt_lock:
