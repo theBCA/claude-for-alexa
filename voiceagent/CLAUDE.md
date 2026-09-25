@@ -21,12 +21,12 @@ It is his own Claude-powered assistant. The Echo Dot is used only as a Bluetooth
   - `llm.provider: claude_cli` uses Berk's own Claude Pro/Max subscription for his personal use only, by running the official `claude` CLI headlessly (`claude -p`) on his own machine. We never extract or reuse the CLI's OAuth token. Research in the chat confirmed Anthropic banned third-party use of subscription OAuth tokens (ToS change Feb 2026, enforcement April 4, 2026), while running the official CLI on your own machine is ordinary use.
   - Gemini: Google shut down subscription logins in Gemini CLI for consumer tiers (June 18, 2026) and bans reusing its OAuth in third-party tools. Gemini is API key only.
   - For a future product: API keys held server-side, or a user-pays "connect your account" flow via OpenRouter OAuth (proposed, not built, Berk hasn't confirmed yet).
-- Lights: Govee (controlled over LAN, "LAN Control" must be enabled per device in the Govee Home app) and Lepro. Lepro support is pending: it depends on whether his Lepro lights use Smart Life/Tuya (then the Tuya route works) or Lepro's own LampUX app (no official integration). Ask him which app.
+- Lights: Govee (controlled over LAN, "LAN Control" must be enabled per device in the Govee Home app) and Lepro. His Lepro lights use Lepro's own app, so Tuya is out; see next steps item 4 for what the research found.
 - Multilingual: Whisper detects the language per utterance, the model replies in that language, TTS switches voice (en Samantha, tr Yelda, de Anna on macOS). Berk speaks Turkish, English and German.
 
 ## Current state (v0.2)
 
-15 unit and integration tests pass: `python -m unittest discover -s tests`
+25 Python tests and 13 Android unit tests pass: `python -m unittest discover -s tests` (v0.3 count)
 
 Tested: agent tool loop (fake Anthropic client), memory, sentence streaming, Govee packet format, timers, VAD collector state machine, full websocket protocol against a real server, the real satellite client end to end (scripted mic, print TTS), and the claude_cli provider end to end through the MCP bridge (fake `claude` binary that spawns the bridge and calls a tool).
 
@@ -63,7 +63,7 @@ voiceagent/
   tools/govee.py  LAN API: discover (multicast 239.255.255.250:4001, replies on 4002), control on 4003, control_lights tool
   tools/roborock.py  Roborock vacuum via python-roborock on its own event loop thread; roborock-login saves ~/.voiceagent/roborock.json
   admin.py        admin web UI: stdlib HTTP server thread, JSON API, log buffer; admin.html is the single page
-tests/            test_core.py, test_network.py, test_claude_cli.py, fake_claude.py
+tests/            test_core.py, test_network.py (protocol, sleep mode, admin API), test_claude_cli.py, test_roborock.py, fake_claude.py
 README.md         setup and usage, including Android/Termux steps
 ARCHITECTURE.md   product thinking, latency budget, protocol trade-offs, roadmap, open product questions
 config.example.yaml
