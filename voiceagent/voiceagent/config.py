@@ -37,7 +37,7 @@ DEFAULTS: dict[str, Any] = {
     },
     "listen": {
         "vad_aggressiveness": 2,  # 0-3, higher = stricter about what counts as speech
-        "silence_ms": 800,        # end of utterance after this much silence
+        "silence_ms": 1000,       # end of utterance after this much silence (higher = fewer cut-off sentences)
         "max_seconds": 20,
         "start_timeout_s": 5,     # give up if nothing is said after the wake word
     },
@@ -47,6 +47,9 @@ DEFAULTS: dict[str, Any] = {
         "compute_type": "int8",
         "language": None,         # None = auto-detect per utterance
         "languages": ["en", "tr", "de"],  # auto-detect only picks among these; [] = any language
+        "beam_size": 5,           # 1 is fastest, 5 is Whisper's default and more accurate for tr/de
+        # nudges spelling of names and mixed languages; keep it short
+        "initial_prompt": "Conversation with the assistant Jarvis in English, Turkish or German.",
     },
     "tts": {
         "engine": "say",          # "say" (macOS) or "piper"

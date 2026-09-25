@@ -112,10 +112,14 @@ class SpeechToText:
 
         self.language = cfg.language
         self.languages = list(cfg.languages or [])
+        self.beam_size = getattr(cfg, "beam_size", 5)
+        self.initial_prompt = getattr(cfg, "initial_prompt", None)
         self.model = WhisperModel(cfg.model, device=cfg.device, compute_type=cfg.compute_type)
 
     def _run(self, audio, language):
-        segments, info = self.model.transcribe(audio, language=language, beam_size=1, vad_filter=True)
+        segments, info = self.model.transcribe(
+            audio, language=language, beam_size=self.beam_size, vad_filter=True,
+            initial_prompt=self.initial_prompt, condition_on_previous_text=False)
         return list(segments), info
 
     def transcribe(self, pcm: bytes) -> tuple[str, str | None]:

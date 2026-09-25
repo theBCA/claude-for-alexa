@@ -132,8 +132,13 @@ class Spotify:
                                               "Content-Type": "application/json"})
         try:
             with urllib.request.urlopen(req, timeout=8) as r:
-                raw = r.read()
-                return json.loads(raw) if raw else None
+                raw = r.read().strip()
+                if not raw:
+                    return None
+                try:
+                    return json.loads(raw)
+                except ValueError:
+                    return None   # some endpoints (pause, next) return 200 with an empty/non-JSON body
         except urllib.error.HTTPError as e:
             try:
                 err = json.loads(e.read()).get("error", {})

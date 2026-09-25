@@ -59,7 +59,7 @@ class TestCollector(unittest.TestCase):
 
     def test_done_after_silence(self):
         c = UtteranceCollector(self.cfg.listen, 16000, 5, vad=FakeVad())
-        results = [c.feed(SPEECH) for _ in range(5)] + [c.feed(SILENCE) for _ in range(12)]
+        results = [c.feed(SPEECH) for _ in range(5)] + [c.feed(SILENCE) for _ in range(16)]
         self.assertIn("done", results)
         self.assertGreater(len(c.audio()), 5 * 2560 - 1)
 
