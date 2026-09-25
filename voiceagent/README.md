@@ -21,7 +21,9 @@ Two providers, set with `llm.provider` in config.yaml:
 
 `anthropic` (default) uses an API key. Fastest replies, and the only option for anything other people use.
 
-`claude_cli` uses your own Claude Pro/Max subscription, for personal use on your own machine. Install Claude Code, run `claude` once and log in, then set `provider: claude_cli`. The brain runs the official CLI in headless mode (`claude -p`) and connects your tools to it over MCP. It never touches the CLI's login token, which is what Anthropic bans for third-party apps. The brain starts the CLI while you are still talking and turns off extended thinking, so the first word comes about two seconds after you stop speaking. Your own Claude Code settings, hooks and plugins are not loaded into it. If your CLI version rejects a flag such as `--include-partial-messages` or `--setting-sources`, update Claude Code or adjust `llm.cli_args`.
+`claude_cli` uses your own Claude Pro/Max subscription, for personal use on your own machine. Install Claude Code, run `claude` once and log in, then set `provider: claude_cli`. The brain runs the official CLI in headless mode (`claude -p`) and connects your tools to it over MCP. It never touches the CLI's login token, which is what Anthropic bans for third-party apps. To use a different Claude account for the assistant than the one your own `claude` uses (a personal account next to a work one), set `llm.cli_config_dir: ~/.voiceagent/claude-personal` and log in once with `CLAUDE_CONFIG_DIR=~/.voiceagent/claude-personal claude auth login`.
+
+The brain starts the CLI while you are still talking and turns off extended thinking, so the first word comes about two seconds after you stop speaking. Your own Claude Code settings, hooks and plugins are not loaded into it. If your CLI version rejects a flag such as `--include-partial-messages` or `--setting-sources`, update Claude Code or adjust `llm.cli_args`.
 
 ## Brain and satellites
 
@@ -82,6 +84,8 @@ Roborock vacuums: run `python -m voiceagent roborock-login` once. It emails you 
 
 Spotify (needs Premium): create an app at developer.spotify.com/dashboard with the Web API and the redirect URI `http://127.0.0.1:8888/callback`, then run `python -m voiceagent spotify-login` and paste its Client ID. Ask in any language ("Tarkan'dan Şımarık'ı aç", "spiel Rammstein", "play something calm for dinner"); it plays on whichever Spotify device is active, or on `tools.spotify.device`. Music is turned down while you talk to Jarvis and comes back after.
 
+Google Calendar and Gmail: in [Google Cloud Console](https://console.cloud.google.com/) create a project, enable the Google Calendar API and the Gmail API, set up the OAuth consent screen (External, add yourself as a test user, then "Publish app" so the login doesn't expire every 7 days), and create an OAuth client of type "Desktop app". Download its JSON and run `python -m voiceagent google-login ~/Downloads/client_secret_....json`. Then: "what's on my calendar tomorrow", "put dentist on Friday at 3", "any new mail from Anna?". Jarvis saves emails as drafts unless you confirm sending after it reads them back.
+
 Anything with an MCP server (calendar, Spotify, Home Assistant) can be added under `llm.mcp_servers` in claude_cli mode, and web search is on by default.
 
 ## Things to say
@@ -104,7 +108,7 @@ voiceagent/
   claude_cli.py   personal mode through the official claude CLI, plus a localhost tool relay
   mcp_bridge.py   tiny MCP server the CLI launches; forwards tool calls to the relay
   memory.py       SQLite: short-term conversation, long-term facts
-  tools/          one file per capability (core.py, govee.py, roborock.py, spotify.py)
+  tools/          one file per capability (core.py, govee.py, roborock.py, spotify.py, google.py)
   admin.py        admin web UI and its JSON API (admin.html is the page)
 tests/            python -m unittest discover -s tests
 ```

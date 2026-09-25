@@ -19,6 +19,7 @@ from .tools import ToolRegistry
 from .tools.core import register_core_tools
 from .tools.govee import register_govee_tools
 from .tools.roborock import register_roborock_tools
+from .tools.google import register_google_tools
 from .tools.spotify import register_spotify_tools
 
 log = logging.getLogger(__name__)
@@ -38,6 +39,8 @@ def build_tools(cfg, memory: Memory) -> ToolRegistry:
         log.info("roborock: enabled")
     if cfg.tools.spotify.enabled and register_spotify_tools(reg, cfg.tools.spotify):
         log.info("spotify: enabled")
+    if cfg.tools.google.enabled and register_google_tools(reg):
+        log.info("google calendar and gmail: enabled")
     return reg
 
 

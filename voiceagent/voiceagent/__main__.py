@@ -7,6 +7,7 @@
   python -m voiceagent govee-discover  find Govee lights with LAN control on
   python -m voiceagent roborock-login  link your Roborock account once (email code)
   python -m voiceagent spotify-login   link Spotify once (needs a Client ID from developer.spotify.com)
+  python -m voiceagent google-login F  link Google Calendar and Gmail once (F = OAuth client JSON)
   python -m voiceagent audio-devices   list mics and speakers
 """
 from __future__ import annotations
@@ -20,7 +21,8 @@ from .config import load_config
 def main() -> None:
     p = argparse.ArgumentParser(prog="voiceagent")
     p.add_argument("command", choices=["serve", "satellite", "run", "chat", "govee-discover", "roborock-login",
-                                        "spotify-login", "audio-devices"])
+                                        "spotify-login", "google-login", "audio-devices"])
+    p.add_argument("file", nargs="?", help="google-login: the OAuth client JSON from Google Cloud Console")
     p.add_argument("-c", "--config", help="path to config.yaml")
     p.add_argument("--speak", action="store_true", help="chat mode: also speak replies")
     p.add_argument("--password", action="store_true", help="roborock-login: use your password instead of an email code")
@@ -78,6 +80,12 @@ def main() -> None:
         email = input("Roborock account email: ").strip()
         login(email, getpass.getpass("Roborock password: ") if args.password else None)
         print(f"Saved to {CREDENTIALS}. Restart the brain and ask Jarvis about the vacuum.")
+    elif args.command == "google-login":
+        from .tools.google import CREDENTIALS as GOOGLE_CREDENTIALS, login as google_login
+        if not args.file:
+            raise SystemExit("usage: python -m voiceagent google-login path/to/client_secret.json")
+        google_login(args.file)
+        print(f"Saved to {GOOGLE_CREDENTIALS}. Restart the brain and ask about your calendar or email.")
     elif args.command == "spotify-login":
         from .tools.spotify import CREDENTIALS, REDIRECT, login
         print("In your Spotify developer app, the redirect URI must be exactly " + REDIRECT)

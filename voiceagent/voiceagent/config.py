@@ -66,6 +66,9 @@ DEFAULTS: dict[str, Any] = {
         "cli_path": "claude",
         "cli_model": "haiku",
         "cli_args": [],           # extra flags for the claude CLI
+        # Separate Claude Code login for the assistant: set a folder, then log in once with
+        # CLAUDE_CONFIG_DIR=<folder> claude auth login. None = the normal `claude` login on this machine.
+        "cli_config_dir": None,
         "cli_session_idle_s": 900,  # keep the CLI session this long after the last turn (fast replies vs ~200 MB)
         "cli_thinking": False,    # extended thinking: smarter on hard questions, ~0.7 s slower to start talking
         # Your own MCP servers (claude_cli mode), same format as Claude Code's "mcpServers":
@@ -104,6 +107,8 @@ DEFAULTS: dict[str, Any] = {
         "timers": {"enabled": True},
         # active once `python -m voiceagent roborock-login` has saved credentials
         "roborock": {"enabled": True},
+        # Google Calendar and Gmail, active once `python -m voiceagent google-login client_secret.json` ran
+        "google": {"enabled": True},
         # active once `python -m voiceagent spotify-login` has saved a token (needs Spotify Premium)
         "spotify": {
             "enabled": True,

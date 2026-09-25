@@ -26,6 +26,7 @@ llm:
   model: claude-haiku-4-5-20251001   # API mode; try claude-sonnet-5 for smarter replies
   cli_model: haiku                   # claude_cli mode: haiku, sonnet or opus
   web_search: true                   # weather, news, opening hours
+  # cli_config_dir: ~/.voiceagent/claude-personal   # separate Claude login for the assistant, see README
   # cli_thinking: false              # extended thinking, about 0.7 s slower to start talking
   # Your own MCP servers (claude_cli mode), same format as Claude Code's mcpServers:
   # mcp_servers:

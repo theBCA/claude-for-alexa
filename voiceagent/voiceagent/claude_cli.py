@@ -183,6 +183,9 @@ class ClaudeCLIAgent:
         env.pop("ANTHROPIC_API_KEY", None)  # otherwise the CLI bills the API instead of your subscription
         if not self.cfg.llm.cli_thinking:
             env["MAX_THINKING_TOKENS"] = "0"  # extended thinking costs ~0.7 s before the first word
+        if self.cfg.llm.cli_config_dir:
+            # a separate Claude Code login just for the assistant (e.g. a personal account next to a work one)
+            env["CLAUDE_CONFIG_DIR"] = os.path.expanduser(self.cfg.llm.cli_config_dir)
         # stderr to a file: a long-lived process would block once a pipe nobody reads fills up
         errlog = open(self.workdir / "claude-cli.log", "a")
         proc = subprocess.Popen(self.command(build_system_prompt(self.cfg, self.memory, None)),
