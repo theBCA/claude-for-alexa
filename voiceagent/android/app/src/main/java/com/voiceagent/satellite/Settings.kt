@@ -21,6 +21,19 @@ class Settings(context: Context) {
         get() = prefs.getBoolean("chime", true)
         set(value) = prefs.edit().putBoolean("chime", value).apply()
 
+    /** Chosen voice name for a language, or "" for automatic. */
+    fun voice(lang: String): String = prefs.getString("voice_$lang", "") ?: ""
+
+    fun setVoice(lang: String, name: String) = prefs.edit().putString("voice_$lang", name).apply()
+
+    var speechRate: Float
+        get() = prefs.getFloat("speech_rate", 1.0f)
+        set(value) = prefs.edit().putFloat("speech_rate", value).apply()
+
+    fun voicePrefs() = VoicePrefs(
+        voices = Voices.LANGUAGES.associateWith { voice(it) }.filterValues { it.isNotEmpty() },
+        rate = speechRate)
+
     fun toConfig() = SatelliteConfig(server = server, id = id, token = token, chime = chime)
 
     companion object {

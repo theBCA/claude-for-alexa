@@ -16,6 +16,8 @@ sealed interface BrainMessage {
     data object TurnEnd : BrainMessage
     data class Announce(val text: String, val lang: String?) : BrainMessage
     data object ConversationEnd : BrainMessage
+    data object Sleep : BrainMessage
+    data object Awake : BrainMessage
     data class Unknown(val raw: String) : BrainMessage
 }
 
@@ -42,6 +44,8 @@ object Protocol {
             "turn_end" -> BrainMessage.TurnEnd
             "announce" -> BrainMessage.Announce(str("text") ?: "", str("lang"))
             "conversation_end" -> BrainMessage.ConversationEnd
+            "sleep" -> BrainMessage.Sleep
+            "awake" -> BrainMessage.Awake
             else -> BrainMessage.Unknown(raw)
         }
     }

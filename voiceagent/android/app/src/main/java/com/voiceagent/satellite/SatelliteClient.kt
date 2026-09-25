@@ -37,6 +37,7 @@ sealed interface Status {
     data object Idle : Status
     data object Listening : Status
     data object Speaking : Status
+    data object Sleeping : Status
     data class Retrying(val seconds: Long, val reason: String) : Status
     data object Rejected : Status
     data object Stopped : Status
@@ -46,6 +47,7 @@ sealed interface Status {
         Idle -> "Waiting for the wake word"
         Listening -> "Listening"
         Speaking -> "Speaking"
+        Sleeping -> "Sleeping. Say \"Hey Jarvis, wake up\""
         is Retrying -> "Connection lost ($reason), retrying in ${seconds}s"
         Rejected -> "The brain rejected the token. Check it in the app."
         Stopped -> "Stopped"
@@ -79,6 +81,10 @@ class SatelliteClient(
 
     @Volatile
     private var inConversation = false
+    private var asleep = false
+
+    /** What to show between conversations. */
+    private fun resting(): Status = if (asleep) Status.Sleeping else Status.Idle
 
     private var loopThread: Thread? = null
 
@@ -157,6 +163,7 @@ class SatelliteClient(
 
         log.log("connected to ${config.server} as ${config.id}", null)
         inConversation = false
+        asleep = false // the brain says "sleep" right after hello if it is asleep
         onStatus(Status.Idle)
         ws.send(Protocol.hello(config.id, config.token))
 
@@ -207,17 +214,25 @@ class SatelliteClient(
             BrainMessage.TurnEnd -> voice.end {
                 // bound to this socket: after a reconnect the brain isn't waiting for it
                 ws.send(Protocol.speechDone())
-                onStatus(if (inConversation) Status.Listening else Status.Idle)
+                onStatus(if (inConversation) Status.Listening else resting())
             }
             is BrainMessage.Announce -> {
                 onStatus(Status.Speaking)
                 voice.speak(msg.text, msg.lang)
-                voice.end { onStatus(if (inConversation) Status.Listening else Status.Idle) }
+                voice.end { onStatus(if (inConversation) Status.Listening else resting()) }
             }
             BrainMessage.ConversationEnd -> {
                 inConversation = false
-                onStatus(Status.Idle)
+                onStatus(resting())
                 if (config.chime) chime.end()
+            }
+            BrainMessage.Sleep -> {
+                asleep = true
+                if (!inConversation) onStatus(Status.Sleeping)
+            }
+            BrainMessage.Awake -> {
+                asleep = false
+                if (!inConversation) onStatus(Status.Idle)
             }
             is BrainMessage.Unknown -> log.log("unknown message: ${msg.raw}", null)
         }

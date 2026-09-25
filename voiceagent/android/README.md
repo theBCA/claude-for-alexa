@@ -13,6 +13,8 @@ There is no Play Store listing and you don't need to build it yourself. GitHub A
 5. Tap "Let it run in the background" and allow it. Without this, Android tends to stop the app after a while with the screen off.
 6. Pair the phone with the Echo Dot ("Alexa, pair") so replies play through it.
 
+Voices: the app uses Speech Services by Google when it is installed, which sounds far more natural than the built-in engine on many phones (Samsung especially). Under Voices you can pick a voice for English, Turkish and German, try each with Test, and set the speed. Voices marked "(online)" are Google's server voices, usually the most natural, and need internet. "Download voices" opens Google's voice downloads if a language is missing. Press Start again after changing voices.
+
 A notification stays up while the app listens. Android requires it for an always-on mic, and it has a Stop button.
 
 For automatic updates, install Obtainium and add the repo URL. Turn on "include prereleases" in Obtainium if you want builds from branches other than main.

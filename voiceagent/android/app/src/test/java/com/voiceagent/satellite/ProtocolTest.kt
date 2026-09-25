@@ -12,6 +12,8 @@ class ProtocolTest {
         assertEquals(BrainMessage.Say("Tamam.", "tr"), Protocol.parse("""{"type":"say","text":"Tamam.","lang":"tr"}"""))
         assertEquals(BrainMessage.TurnEnd, Protocol.parse("""{"type":"turn_end"}"""))
         assertEquals(BrainMessage.ConversationEnd, Protocol.parse("""{"type":"conversation_end"}"""))
+        assertEquals(BrainMessage.Sleep, Protocol.parse("""{"type":"sleep"}"""))
+        assertEquals(BrainMessage.Awake, Protocol.parse("""{"type":"awake"}"""))
         assertEquals(
             BrainMessage.Announce("Your tea is done.", "en"),
             Protocol.parse("""{"type":"announce","text":"Your tea is done.","lang":"en"}"""))

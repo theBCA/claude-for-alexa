@@ -18,6 +18,7 @@ from .memory import Memory
 from .tools import ToolRegistry
 from .tools.core import register_core_tools
 from .tools.govee import register_govee_tools
+from .tools.roborock import register_roborock_tools
 
 log = logging.getLogger(__name__)
 
@@ -32,6 +33,8 @@ def build_tools(cfg, memory: Memory) -> ToolRegistry:
     if cfg.tools.govee.enabled:
         found = register_govee_tools(reg, dict(cfg.tools.govee.devices), cfg.tools.govee.auto_discover)
         log.info("govee lights: %s", found or "none found")
+    if cfg.tools.roborock.enabled and register_roborock_tools(reg):
+        log.info("roborock: enabled")
     return reg
 
 

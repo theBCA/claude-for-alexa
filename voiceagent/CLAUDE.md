@@ -61,6 +61,8 @@ voiceagent/
   tools/__init__.py  ToolRegistry: register(name, description, schema) decorator, run() never raises
   tools/core.py   remember, forget, set_timer (announces through ctx["announce"], broadcast to all satellites in server mode)
   tools/govee.py  LAN API: discover (multicast 239.255.255.250:4001, replies on 4002), control on 4003, control_lights tool
+  tools/roborock.py  Roborock vacuum via python-roborock on its own event loop thread; roborock-login saves ~/.voiceagent/roborock.json
+  admin.py        admin web UI: stdlib HTTP server thread, JSON API, log buffer; admin.html is the single page
 tests/            test_core.py, test_network.py, test_claude_cli.py, fake_claude.py
 README.md         setup and usage, including Android/Termux steps
 ARCHITECTURE.md   product thinking, latency budget, protocol trade-offs, roadmap, open product questions
@@ -79,7 +81,7 @@ android/          native satellite app (see android/README.md)
   app/src/test/   ProtocolTest, VoiceTest, SatelliteClientTest (MockWebServer as the brain)
 ```
 
-Websocket protocol (details in server.py): satellite sends hello with id and token, then binary 16 kHz mono int16 PCM frames of 80 ms, and `speech_done` after it finishes speaking a turn. Brain sends `wake`, `say` (text + lang), `turn_end`, `announce`, `conversation_end`. Wake word currently runs on the brain, so satellites stream continuously (about 32 KB/s); moving wake word onto the device later needs no protocol change.
+Websocket protocol (details in server.py): satellite sends hello with id and token, then binary 16 kHz mono int16 PCM frames of 80 ms, and `speech_done` after it finishes speaking a turn. Brain sends `wake`, `say` (text + lang), `turn_end`, `announce`, `conversation_end`, and `sleep` / `awake` when sleep mode changes. Wake word currently runs on the brain, so satellites stream continuously (about 32 KB/s); moving wake word onto the device later needs no protocol change.
 
 ## Next steps, in the order agreed
 
@@ -90,11 +92,22 @@ Websocket protocol (details in server.py): satellite sends hello with id and tok
    - app contents: settings screen (brain URL, token, room id), foreground service with microphone type and persistent notification (required by Android for always-on mic), AudioRecord at 16 kHz mono, websocket client speaking the same protocol, Android TextToSpeech per language, reconnect with backoff
    - later in the app: on-device wake word (openWakeWord ONNX via ONNX Runtime Mobile) so the phone only streams after the wake word
 3. OpenRouter "connect your account" OAuth (PKCE) as a provider, if Berk confirms. This is the product path for other users.
-4. Lepro support once Berk says which app his Lepro lights use.
+4. Lepro: Berk's lights use Lepro's own app (LampUX), not Tuya. Research (September 2026): no local control at all (every TCP port closed on both bulbs, 192.168.178.20 and .41, Espressif ESP8684). The only route is Lepro's cloud: HTTPS login at api-eu-iot.lepro.com, then MQTT over mutual TLS with a client key shipped inside the Lepro app. The only open client, github.com/Sanji78/lepro_led, is "All Rights Reserved", so nothing may be copied from it, including its bundled key. Options still to decide with Berk: our own client from the documented protocol facts with a key he extracts himself, going through Alexa (the Echo already controls them), or Matter if his bulbs support it.
 5. Roadmap v0.2 remainder: barge-in with echo cancellation, streaming TTS, fast local path for simple commands like "lights off" that skips the LLM (matters most in claude_cli mode where replies start 1 to 3 s later), prompt caching, Gemini API provider, Home Assistant tool.
-6. v0.3: MCP client so any MCP server becomes a tool (calendar, email, Spotify), web dashboard for memory, history and latency stats.
+6. v0.3: MCP servers work in claude_cli mode through `llm.mcp_servers` (passed to the CLI); API mode still needs an MCP client. The admin UI exists (see below); history and latency charts are not in it yet.
 
 Open product questions (not decided): first customer (Home Assistant tinkerers vs ordinary people), bring-your-own-key vs subscription, product name.
+
+## Added in v0.3 (September 25, 2026)
+
+- Sleep mode: "Jarvis, go to sleep" / "uyu" / "schlaf" makes the brain ignore everything, including the wake word, until "hey Jarvis, wake up" / "uyan" / "wach auf". Brain-wide, phrases in `assistant.sleep_phrases` and `assistant.wake_phrases`, filler words and the assistant name are ignored when matching. Only Whisper runs while asleep, and only after a wake word.
+- Latency in claude_cli mode, measured on Berk's M3 Air: from end of speech to first word went from about 3.3 s to 2.0 s. The CLI process is prewarmed at the wake word and at each follow-up, runs with `--setting-sources ""` from ~/.voiceagent (so Berk's own hooks, plugins and this CLAUDE.md don't load), and with `MAX_THINKING_TOKENS=0` (Haiku's extended thinking cost about 0.7 s). The rest is Whisper base (about 0.6 s) and model time to first token (about 0.9 s). Whisper small was tested: better Turkish but 2.9 s per sentence on this Mac, so base stays.
+- Whisper auto-detect is limited to `stt.languages` (en, tr, de); a Turkish sentence was detected as Russian before. Segments that look like noise (no_speech_prob > 0.6 and avg_logprob < -1) are dropped.
+- Web search on by default (`llm.web_search`): WebSearch/WebFetch in CLI mode, the web_search server tool in API mode.
+- Roborock vacuum (`tools/roborock.py`, python-roborock 7.9): `python -m voiceagent roborock-login` once (email code), then a `vacuum` tool (start, stop, pause, dock, status, find, clean_rooms by room name). Local network first, Roborock cloud as fallback. Unit tested with a fake device only; not yet tried on Berk's vacuum (Roborock at 192.168.178.26).
+- Admin web UI (`admin.py` + `admin.html`) at http://<brain>:8766 with the same token: sleep toggle, satellites, light and vacuum cards, forms for every tool, typed chat, announcements, memory, config.yaml editor with restart, live log.
+- Android app: prefers Google's TTS engine, picks the best installed voice per language, and has a voice picker per language with Test buttons, a speed setting and a "Download voices" button. Shows "Sleeping" in the notification.
+- Network scan (September 25, 2026) on 192.168.178.0/24: Roborock .26, likely Govee .34 (LAN Control was off, discovery got no answer), two Lepro bulbs .20 and .41, Echo .32.
 
 ## How to work in this repo
 

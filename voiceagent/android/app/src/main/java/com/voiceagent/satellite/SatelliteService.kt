@@ -62,7 +62,7 @@ class SatelliteService : Service() {
         // Start while running means the settings changed: reconnect with the new ones.
         stopClient()
         if (wakeLock == null) acquireLocks()
-        val tts = AndroidTts(this, log).also { this.tts = it }
+        val tts = AndroidTts(this, log, settings.voicePrefs()).also { this.tts = it }
         val chime = ToneChime().also { this.chime = it }
         val config = settings.toConfig()
         val voice = Voice(tts, config.postSpeechMuteMs, log).also { this.voice = it }

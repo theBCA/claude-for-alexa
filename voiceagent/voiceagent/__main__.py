@@ -5,6 +5,7 @@
   python -m voiceagent run             all-in-one voice mode on one machine, no network
   python -m voiceagent chat            text mode for testing the brain and tools
   python -m voiceagent govee-discover  find Govee lights with LAN control on
+  python -m voiceagent roborock-login  link your Roborock account once (email code)
   python -m voiceagent audio-devices   list mics and speakers
 """
 from __future__ import annotations
@@ -17,7 +18,8 @@ from .config import load_config
 
 def main() -> None:
     p = argparse.ArgumentParser(prog="voiceagent")
-    p.add_argument("command", choices=["serve", "satellite", "run", "chat", "govee-discover", "audio-devices"])
+    p.add_argument("command", choices=["serve", "satellite", "run", "chat", "govee-discover", "roborock-login",
+                                        "audio-devices"])
     p.add_argument("-c", "--config", help="path to config.yaml")
     p.add_argument("--speak", action="store_true", help="chat mode: also speak replies")
     p.add_argument("-v", "--verbose", action="store_true")
@@ -68,6 +70,10 @@ def main() -> None:
             print("No lights answered. Enable 'LAN Control' in the Govee Home app and check the same Wi-Fi.")
         for d in found:
             print(f"{d['ip']:16} {d['sku']:10} {d['device']}")
+    elif args.command == "roborock-login":
+        from .tools.roborock import CREDENTIALS, login
+        login(input("Roborock account email: ").strip())
+        print(f"Saved to {CREDENTIALS}. Restart the brain and ask Jarvis about the vacuum.")
     elif args.command == "chat":
         chat(cfg, args.speak)
     else:

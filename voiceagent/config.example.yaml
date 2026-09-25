@@ -2,6 +2,7 @@
 
 assistant:
   name: Jarvis
+  # sleep_phrases / wake_phrases: see voiceagent/config.py for the defaults in en, tr and de
   user_name: Berk
   followup_seconds: 6
   persona: >
@@ -13,7 +14,8 @@ wakeword:
   threshold: 0.5
 
 stt:
-  model: small           # "base" is faster, "medium" is more accurate for Turkish
+  model: base            # "small" is more accurate for Turkish but about 3x slower on a MacBook Air
+  languages: [en, tr, de]  # auto-detect only picks among these
 
 tts:
   engine: say
@@ -23,14 +25,23 @@ llm:
   provider: anthropic                # or claude_cli: your own Pro/Max subscription, personal use only
   model: claude-haiku-4-5-20251001   # API mode; try claude-sonnet-5 for smarter replies
   cli_model: haiku                   # claude_cli mode: haiku, sonnet or opus
+  web_search: true                   # weather, news, opening hours
+  # cli_thinking: false              # extended thinking, about 0.7 s slower to start talking
+  # Your own MCP servers (claude_cli mode), same format as Claude Code's mcpServers:
+  # mcp_servers:
+  #   spotify: {command: npx, args: [-y, some-spotify-mcp]}
+  #   home: {type: http, url: "http://192.168.1.10:8123/mcp"}
 
 tools:
   govee:
     devices: {}          # fill from `python -m voiceagent govee-discover`, e.g. {living room: 192.168.1.40}
+  roborock:
+    enabled: true        # active after `python -m voiceagent roborock-login`
 
 server:
   port: 8765
   token: change-me-to-something-long   # satellites must send the same token
+  admin_port: 8766                     # admin web UI, same token
 
 satellite:
   server: ws://127.0.0.1:8765          # the brain's address; use the Mac's LAN IP from a phone

@@ -10,17 +10,21 @@ import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings as SystemSettings
+import android.speech.tts.TextToSpeech
 import android.text.InputType
 import android.view.View
 import android.view.WindowInsets
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.Spinner
 import android.widget.TextView
 
-/** Settings screen: brain address, token, room id, and start/stop. */
+/** Settings screen: brain address, token, room id, voices, and start/stop. */
 class MainActivity : Activity() {
     private lateinit var settings: Settings
     private lateinit var server: EditText
@@ -29,12 +33,25 @@ class MainActivity : Activity() {
     private lateinit var chime: CheckBox
     private lateinit var status: TextView
     private lateinit var battery: Button
+    private lateinit var voiceRows: LinearLayout
     private var unlisten: (() -> Unit)? = null
+
+    /** Separate engine instance for listing and previewing voices; the service has its own. */
+    private var preview: TextToSpeech? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         settings = Settings(this)
         setContentView(buildUi())
+        preview = Voices.engine(this) { status ->
+            runOnUiThread { if (status == TextToSpeech.SUCCESS) fillVoiceRows() else showNoTts() }
+        }
+    }
+
+    override fun onDestroy() {
+        preview?.shutdown()
+        preview = null
+        super.onDestroy()
     }
 
     override fun onResume() {
@@ -92,6 +109,11 @@ class MainActivity : Activity() {
         }
         column.addView(chime)
 
+        label("Voices (changes apply after pressing Start again)")
+        voiceRows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        voiceRows.addView(TextView(this).apply { text = "Loading voices..." })
+        column.addView(voiceRows)
+
         val buttons = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(0, dp(16), 0, 0)
@@ -139,6 +161,104 @@ class MainActivity : Activity() {
                 v.setPadding(left, top, right, bottom)
                 insets
             }
+        }
+    }
+
+    private fun fillVoiceRows() {
+        val tts = preview ?: return
+        voiceRows.removeAllViews()
+        val all = try {
+            tts.voices
+        } catch (e: RuntimeException) {
+            null
+        }
+        for (lang in Voices.LANGUAGES) {
+            val voices = Voices.installed(all, lang)
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            row.addView(TextView(this).apply {
+                text = lang.uppercase()
+                width = dp(36)
+            })
+            if (voices.isEmpty()) {
+                row.addView(TextView(this).apply { text = "No voice installed. Use \"Download voices\" below." })
+                voiceRows.addView(row)
+                continue
+            }
+            val names = listOf("") + voices.map { it.name }
+            val labels = listOf("Automatic (${Voices.label(voices.first())})") + voices.map { Voices.label(it) }
+            val spinner = Spinner(this).apply {
+                adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, labels)
+                setSelection(names.indexOf(settings.voice(lang)).coerceAtLeast(0))
+                onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                    override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                        settings.setVoice(lang, names[position])
+                    }
+
+                    override fun onNothingSelected(parent: AdapterView<*>?) {}
+                }
+            }
+            row.addView(spinner, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            row.addView(Button(this).apply {
+                text = "Test"
+                setOnClickListener { previewVoice(lang, names[spinner.selectedItemPosition]) }
+            })
+            voiceRows.addView(row)
+        }
+
+        val rates = listOf(0.9f, 1.0f, 1.1f, 1.2f)
+        val rateRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        rateRow.addView(TextView(this).apply { text = "Speed" })
+        rateRow.addView(Spinner(this).apply {
+            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
+                listOf("Slower", "Normal", "A bit faster", "Faster"))
+            setSelection(rates.indexOf(settings.speechRate).takeIf { it >= 0 } ?: 1)
+            onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                    settings.speechRate = rates[position]
+                }
+
+                override fun onNothingSelected(parent: AdapterView<*>?) {}
+            }
+        })
+        voiceRows.addView(rateRow)
+
+        val engine = tts.defaultEngine
+        voiceRows.addView(TextView(this).apply {
+            text = if (tts.engines.any { it.name == Voices.GOOGLE_TTS }) {
+                "Using Speech Services by Google. \"(online)\" voices sound most natural but need internet."
+            } else {
+                "Speech Services by Google isn't installed (current engine: $engine). " +
+                    "Install it from the Play Store for much more natural voices."
+            }
+            setPadding(0, dp(8), 0, 0)
+        })
+        voiceRows.addView(Button(this).apply {
+            text = "Download voices"
+            setOnClickListener { openVoiceDownloads() }
+        })
+    }
+
+    private fun showNoTts() {
+        voiceRows.removeAllViews()
+        voiceRows.addView(TextView(this).apply {
+            text = "Text to speech isn't available. Install Speech Services by Google from the Play Store."
+        })
+    }
+
+    private fun previewVoice(lang: String, name: String) {
+        val tts = preview ?: return
+        tts.setSpeechRate(settings.speechRate)
+        tts.language = Voices.localeFor(lang)
+        Voices.pick(tts.voices, lang, name)?.let { tts.voice = it }
+        tts.speak(SAMPLES[lang] ?: SAMPLES.getValue("en"), TextToSpeech.QUEUE_FLUSH, null, "preview")
+    }
+
+    private fun openVoiceDownloads() {
+        val install = Intent(TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA).setPackage(Voices.GOOGLE_TTS)
+        try {
+            startActivity(install)
+        } catch (e: android.content.ActivityNotFoundException) {
+            startActivity(Intent("com.android.settings.TTS_SETTINGS"))
         }
     }
 
@@ -195,5 +315,10 @@ class MainActivity : Activity() {
 
     companion object {
         private const val REQUEST_PERMISSIONS = 1
+        private val SAMPLES = mapOf(
+            "en" to "Hi. The living room lights are off, and the vacuum is on its way to the kitchen.",
+            "tr" to "Merhaba. Salondaki ışıkları kapattım, süpürge de mutfağa gidiyor.",
+            "de" to "Hallo. Das Licht im Wohnzimmer ist aus, und der Staubsauger fährt in die Küche.",
+        )
     }
 }

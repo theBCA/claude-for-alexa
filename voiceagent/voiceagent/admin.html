@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voiceagent Admin</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --panel: #ffffff; --text: #1d1c1a; --muted: #6b6860; --line: #e4e1da;
+    --accent: #3b5bdb; --accent-text: #ffffff; --ok: #2f9e44; --warn: #e8590c; --bad: #c92a2a;
+    --code: #f0eee9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #141412; --panel: #1f1e1b; --text: #ecebe7; --muted: #9c998f; --line: #34322d;
+            --accent: #7b93ff; --accent-text: #0f1020; --ok: #51cf66; --warn: #ff922b; --bad: #ff6b6b;
+            --code: #262521; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  header { position: sticky; top: 0; z-index: 2; background: var(--panel); border-bottom: 1px solid var(--line);
+           padding: 12px 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  header h1 { font-size: 17px; margin: 0; flex: 1; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); display: inline-block; }
+  .dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.bad { background: var(--bad); }
+  nav { display: flex; gap: 4px; overflow-x: auto; padding: 8px 16px; background: var(--panel);
+        border-bottom: 1px solid var(--line); }
+  nav button { background: none; border: 0; color: var(--muted); padding: 6px 12px; border-radius: 8px;
+               font: inherit; cursor: pointer; white-space: nowrap; }
+  nav button.on { background: var(--code); color: var(--text); font-weight: 600; }
+  main { max-width: 920px; margin: 0 auto; padding: 16px; }
+  section { display: none; } section.on { display: block; }
+  .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  .card h2 { font-size: 14px; margin: 0 0 10px; color: var(--muted); font-weight: 600; text-transform: uppercase;
+             letter-spacing: .04em; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 6px 0; }
+  button.btn { background: var(--code); color: var(--text); border: 1px solid var(--line); border-radius: 8px;
+               padding: 7px 12px; font: inherit; cursor: pointer; }
+  button.btn.primary { background: var(--accent); color: var(--accent-text); border-color: transparent; }
+  button.btn:disabled { opacity: .5; cursor: default; }
+  input, select, textarea { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line);
+                            border-radius: 8px; padding: 7px 10px; min-width: 0; }
+  input[type=text], textarea { width: 100%; }
+  input[type=color] { padding: 2px; width: 44px; height: 34px; }
+  textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; min-height: 55vh; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; background: var(--code); font-size: 12px; }
+  .switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+  .switch input { display: none; }
+  .track { width: 42px; height: 24px; border-radius: 12px; background: var(--line); position: relative; transition: .15s; }
+  .track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%;
+                  background: var(--panel); transition: .15s; }
+  .switch input:checked + .track { background: var(--warn); }
+  .switch input:checked + .track::after { left: 21px; }
+  .result { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--muted); white-space: pre-wrap;
+            word-break: break-word; margin-top: 6px; }
+  .log { font-family: ui-monospace, Menlo, monospace; font-size: 12px; background: var(--panel);
+         border: 1px solid var(--line); border-radius: 12px; padding: 10px; max-height: 70vh; overflow: auto; }
+  .log div { padding: 2px 0; border-bottom: 1px dashed var(--line); word-break: break-word; }
+  .log .WARNING { color: var(--warn); } .log .ERROR { color: var(--bad); }
+  .chat { display: flex; flex-direction: column; gap: 8px; min-height: 40vh; margin-bottom: 12px; }
+  .msg { max-width: 85%; padding: 8px 12px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); }
+  .msg.me { align-self: flex-end; background: var(--accent); color: var(--accent-text); border-color: transparent; }
+  ul.facts { list-style: none; padding: 0; margin: 0; }
+  ul.facts li { display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 8px 0;
+                border-bottom: 1px solid var(--line); }
+  #login { max-width: 360px; margin: 18vh auto; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div id="login" class="card hidden">
+  <h2>Voiceagent admin</h2>
+  <p class="muted">Enter the brain's token (<code>server.token</code> in config.yaml).</p>
+  <div class="row"><input id="tokenInput" type="password" autocomplete="current-password" placeholder="Token"></div>
+  <div class="row"><button class="btn primary" onclick="login()">Sign in</button><span id="loginErr" class="muted"></span></div>
+</div>
+
+<div id="app" class="hidden">
+  <header>
+    <h1><span id="dot" class="dot"></span><span id="title">Voiceagent</span></h1>
+    <label class="switch" title="Sleep mode ignores everything until 'hey Jarvis, wake up'">
+      <input type="checkbox" id="sleep" onchange="setSleep(this.checked)"><span class="track"></span>
+      <span id="sleepLabel">Listening</span>
+    </label>
+  </header>
+  <nav id="tabs">
+    <button data-tab="home" class="on">Home</button>
+    <button data-tab="devices">Tools</button>
+    <button data-tab="chat">Chat</button>
+    <button data-tab="memory">Memory</button>
+    <button data-tab="settings">Settings</button>
+    <button data-tab="log">Log</button>
+  </nav>
+  <main>
+    <section id="home" class="on">
+      <div class="grid">
+        <div class="card">
+          <h2>Brain</h2>
+          <div id="brainInfo" class="muted">Loading…</div>
+          <h2 style="margin-top:14px">Satellites</h2>
+          <div id="sats" class="muted">None connected</div>
+        </div>
+        <div class="card hidden" id="lightsCard">
+          <h2>Lights</h2>
+          <div class="row">
+            <input id="lightTarget" type="text" value="all" placeholder="light name or all" style="flex:1">
+          </div>
+          <div class="row">
+            <button class="btn" onclick="lights('on')">On</button>
+            <button class="btn" onclick="lights('off')">Off</button>
+            <input type="color" id="lightColor" value="#ff8c32" title="Color">
+            <button class="btn" onclick="lights('color')">Set color</button>
+          </div>
+          <div class="row">
+            <span class="muted">Brightness</span>
+            <input type="range" id="lightBri" min="1" max="100" value="60" style="flex:1" onchange="lights('brightness')">
+          </div>
+          <div class="row">
+            <span class="muted">White</span>
+            <button class="btn" onclick="lights('temperature', 2700)">Warm</button>
+            <button class="btn" onclick="lights('temperature', 4000)">Neutral</button>
+            <button class="btn" onclick="lights('temperature', 6500)">Cool</button>
+          </div>
+          <div id="lightsOut" class="result"></div>
+        </div>
+        <div class="card hidden" id="vacuumCard">
+          <h2>Vacuum</h2>
+          <div class="row">
+            <button class="btn primary" onclick="vacuum('start')">Start</button>
+            <button class="btn" onclick="vacuum('pause')">Pause</button>
+            <button class="btn" onclick="vacuum('dock')">Dock</button>
+            <button class="btn" onclick="vacuum('find')">Find</button>
+            <button class="btn" onclick="vacuum('status')">Status</button>
+          </div>
+          <div class="row">
+            <input id="vacRooms" type="text" placeholder="Rooms, e.g. Mutfak, Salon" style="flex:1">
+            <button class="btn" onclick="vacuum('clean_rooms')">Clean rooms</button>
+          </div>
+          <div id="vacOut" class="result"></div>
+        </div>
+        <div class="card">
+          <h2>Announce</h2>
+          <p class="muted" style="margin-top:0">Speak a message on every connected satellite.</p>
+          <div class="row"><input id="annText" type="text" placeholder="Dinner is ready"></div>
+          <div class="row">
+            <select id="annLang"><option value="">Auto</option><option>en</option><option>tr</option><option>de</option></select>
+            <button class="btn primary" onclick="announce()">Speak</button>
+            <span id="annOut" class="muted"></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="devices">
+      <p class="muted">Every tool the assistant can use. Run one directly to test a device without talking.</p>
+      <div id="toolForms" class="grid"></div>
+    </section>
+
+    <section id="chat">
+      <div id="chatLog" class="chat"></div>
+      <div class="row">
+        <input id="chatText" type="text" placeholder="Type to Jarvis…" style="flex:1"
+               onkeydown="if(event.key==='Enter')sendChat()">
+        <button class="btn primary" id="chatBtn" onclick="sendChat()">Send</button>
+      </div>
+      <label class="row muted"><input type="checkbox" id="chatSpeak"> Also speak the reply on the satellites</label>
+    </section>
+
+    <section id="memory">
+      <div class="card">
+        <h2>Things Jarvis remembers</h2>
+        <ul id="facts" class="facts"></ul>
+        <div class="row" style="margin-top:10px">
+          <input id="factText" type="text" placeholder="Ceren likes the lights cool in the morning" style="flex:1"
+                 onkeydown="if(event.key==='Enter')addFact()">
+          <button class="btn primary" onclick="addFact()">Add</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="settings">
+      <div class="card">
+        <h2>config.yaml</h2>
+        <p id="cfgPath" class="muted" style="margin-top:0"></p>
+        <textarea id="cfgText" spellcheck="false"></textarea>
+        <div class="row">
+          <button class="btn" onclick="saveConfig(false)">Save</button>
+          <button class="btn primary" onclick="saveConfig(true)">Save and restart brain</button>
+          <span id="cfgOut" class="muted"></span>
+        </div>
+        <p class="muted">Satellites reconnect by themselves after a restart (about 20 seconds while models load).
+          The previous file is kept as config.yaml.bak.</p>
+      </div>
+    </section>
+
+    <section id="log">
+      <div class="row"><label class="muted"><input type="checkbox" id="logFollow" checked> Follow</label></div>
+      <div id="logView" class="log"></div>
+    </section>
+  </main>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let token = "";
+try { token = localStorage.getItem("voiceagent-token") || ""; } catch (e) {}
+let status = null, lastSeq = 0, toolsKey = "";
+
+async function api(path, body) {
+  const res = await fetch("/api/" + path, {
+    method: body === undefined ? "GET" : "POST",
+    headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (res.status === 401) { showLogin("Wrong token"); throw new Error("unauthorized"); }
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+function showLogin(err) {
+  $("app").classList.add("hidden"); $("login").classList.remove("hidden");
+  $("loginErr").textContent = err || "";
+}
+async function login() {
+  token = $("tokenInput").value.trim();
+  try { localStorage.setItem("voiceagent-token", token); } catch (e) {}
+  start();
+}
+
+function esc(s) { const d = document.createElement("div"); d.textContent = s ?? ""; return d.innerHTML; }
+
+async function refresh() {
+  try {
+    status = await api("status");
+  } catch (e) {
+    $("dot").className = "dot bad"; return;
+  }
+  $("login").classList.add("hidden"); $("app").classList.remove("hidden");
+  $("title").textContent = status.name;
+  $("dot").className = "dot " + (status.asleep ? "warn" : status.satellites.length ? "ok" : "");
+  $("sleep").checked = status.asleep;
+  $("sleepLabel").textContent = status.asleep ? "Sleeping" : "Listening";
+  $("brainInfo").innerHTML =
+    `<div>Model: <span class="pill">${esc(status.provider)} · ${esc(status.model)}</span></div>` +
+    `<div>Wake word: <span class="pill">${esc(status.wakeword)}</span></div>` +
+    `<div>Tools: ${status.tools.map(t => `<span class="pill">${esc(t.name)}</span>`).join(" ") || "none"}</div>`;
+  $("sats").innerHTML = status.satellites.length
+    ? status.satellites.map(s => `<div class="row"><span class="dot ok"></span><b>${esc(s.id)}</b>
+        <span class="pill">${esc(s.state)}</span>${s.lang ? `<span class="muted">${esc(s.lang)}</span>` : ""}</div>`).join("")
+    : "None connected";
+  const names = status.tools.map(t => t.name);
+  $("lightsCard").classList.toggle("hidden", !names.includes("control_lights"));
+  $("vacuumCard").classList.toggle("hidden", !names.includes("vacuum"));
+  const key = names.join(",");
+  if (key !== toolsKey) { toolsKey = key; buildToolForms(status.tools); }
+  renderLog(status.log);
+}
+
+function renderLog(lines) {
+  const view = $("logView");
+  for (const l of lines) {
+    if (l.seq <= lastSeq) continue;
+    lastSeq = l.seq;
+    const d = document.createElement("div");
+    d.className = l.level;
+    d.textContent = `${l.t}  ${l.src}  ${l.msg}`;
+    view.appendChild(d);
+  }
+  while (view.children.length > 400) view.removeChild(view.firstChild);
+  if ($("logFollow").checked) view.scrollTop = view.scrollHeight;
+}
+
+async function setSleep(on) {
+  await api("sleep", { asleep: on });
+  setTimeout(refresh, 300);
+}
+
+async function runTool(name, args, out) {
+  out.textContent = "…";
+  try { out.textContent = (await api("tool", { name, arguments: args })).result; }
+  catch (e) { out.textContent = "error: " + e.message; }
+}
+
+function lights(action, kelvin) {
+  const args = { target: $("lightTarget").value.trim() || "all", action };
+  if (action === "brightness") args.brightness = +$("lightBri").value;
+  if (action === "color") args.color = $("lightColor").value;
+  if (action === "temperature") args.kelvin = kelvin;
+  runTool("control_lights", args, $("lightsOut"));
+}
+function vacuum(action) {
+  const args = { action };
+  if (action === "clean_rooms") args.rooms = $("vacRooms").value.split(",").map(s => s.trim()).filter(Boolean);
+  runTool("vacuum", args, $("vacOut"));
+}
+
+function buildToolForms(tools) {
+  const wrap = $("toolForms");
+  wrap.innerHTML = "";
+  for (const t of tools) {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `<h2>${esc(t.name)}</h2><p class="muted" style="margin-top:0">${esc(t.description)}</p>`;
+    const props = t.input_schema.properties || {}, req = t.input_schema.required || [];
+    const inputs = {};
+    for (const [k, p] of Object.entries(props)) {
+      const row = document.createElement("div");
+      row.className = "row";
+      row.innerHTML = `<span class="muted" style="min-width:90px">${esc(k)}${req.includes(k) ? " *" : ""}</span>`;
+      let el;
+      if (p.enum) {
+        el = document.createElement("select");
+        el.innerHTML = (req.includes(k) ? "" : `<option value=""></option>`) +
+          p.enum.map(v => `<option>${esc(v)}</option>`).join("");
+      } else {
+        el = document.createElement("input");
+        el.type = p.type === "integer" || p.type === "number" ? "number" : "text";
+        if (p.minimum !== undefined) el.min = p.minimum;
+        if (p.maximum !== undefined) el.max = p.maximum;
+        el.placeholder = p.type === "array" ? "comma separated" : (p.description || "");
+      }
+      el.style.flex = "1";
+      inputs[k] = [el, p];
+      row.appendChild(el);
+      card.appendChild(row);
+    }
+    const out = document.createElement("div");
+    out.className = "result";
+    const btn = document.createElement("button");
+    btn.className = "btn primary"; btn.textContent = "Run";
+    btn.onclick = () => {
+      const args = {};
+      for (const [k, [el, p]] of Object.entries(inputs)) {
+        const v = el.value.trim();
+        if (!v) continue;
+        args[k] = p.type === "integer" ? parseInt(v, 10) : p.type === "number" ? parseFloat(v)
+          : p.type === "array" ? v.split(",").map(s => s.trim()).filter(Boolean) : v;
+      }
+      runTool(t.name, args, out);
+    };
+    const row = document.createElement("div");
+    row.className = "row"; row.appendChild(btn);
+    card.appendChild(row); card.appendChild(out);
+    wrap.appendChild(card);
+  }
+  if (!tools.length) wrap.innerHTML = `<p class="muted">No tools loaded.</p>`;
+}
+
+async function announce() {
+  const text = $("annText").value.trim();
+  if (!text) return;
+  try {
+    const r = await api("announce", { text, lang: $("annLang").value });
+    $("annOut").textContent = `Sent to ${r.satellites} satellite(s)`;
+    $("annText").value = "";
+  } catch (e) { $("annOut").textContent = e.message; }
+}
+
+function chatMsg(text, me) {
+  const d = document.createElement("div");
+  d.className = "msg" + (me ? " me" : "");
+  d.textContent = text;
+  $("chatLog").appendChild(d);
+  d.scrollIntoView({ block: "end" });
+  return d;
+}
+async function sendChat() {
+  const text = $("chatText").value.trim();
+  if (!text) return;
+  $("chatText").value = "";
+  chatMsg(text, true);
+  const pending = chatMsg("…", false);
+  $("chatBtn").disabled = true;
+  try { pending.textContent = (await api("chat", { text, speak: $("chatSpeak").checked })).reply || "(no reply)"; }
+  catch (e) { pending.textContent = "error: " + e.message; }
+  $("chatBtn").disabled = false;
+}
+
+async function loadFacts() {
+  const { facts } = await api("memory");
+  renderFacts(facts);
+}
+function renderFacts(facts) {
+  const ul = $("facts");
+  ul.innerHTML = facts.length ? "" : `<li class="muted">Nothing yet. Say "remember that…" or add one below.</li>`;
+  for (const f of facts) {
+    const li = document.createElement("li");
+    li.innerHTML = `<span>${esc(f)}</span>`;
+    const b = document.createElement("button");
+    b.className = "btn"; b.textContent = "Forget";
+    b.onclick = async () => renderFacts((await api("memory", { remove: f })).facts);
+    li.appendChild(b);
+    ul.appendChild(li);
+  }
+}
+async function addFact() {
+  const text = $("factText").value.trim();
+  if (!text) return;
+  $("factText").value = "";
+  renderFacts((await api("memory", { add: text })).facts);
+}
+
+async function loadConfig() {
+  const c = await api("config");
+  $("cfgPath").textContent = c.path;
+  $("cfgText").value = c.yaml;
+}
+async function saveConfig(restart) {
+  $("cfgOut").textContent = "Saving…";
+  try {
+    await api("config", { yaml: $("cfgText").value });
+    if (restart) {
+      await api("restart", {});
+      $("cfgOut").textContent = "Restarting…";
+      waitForRestart();
+    } else {
+      $("cfgOut").textContent = "Saved. Restart the brain to apply.";
+    }
+  } catch (e) { $("cfgOut").textContent = e.message; }
+}
+function waitForRestart() {
+  const began = Date.now();
+  const tick = async () => {
+    try { await api("status"); $("cfgOut").textContent = "Brain is back."; refresh(); }
+    catch (e) { if (Date.now() - began < 120000) setTimeout(tick, 2000); else $("cfgOut").textContent = "Still down, check the terminal."; }
+  };
+  setTimeout(tick, 3000);
+}
+
+$("tabs").addEventListener("click", (e) => {
+  const tab = e.target.dataset.tab;
+  if (!tab) return;
+  for (const b of $("tabs").children) b.classList.toggle("on", b.dataset.tab === tab);
+  for (const s of document.querySelectorAll("main section")) s.classList.toggle("on", s.id === tab);
+  if (tab === "memory") loadFacts();
+  if (tab === "settings") loadConfig();
+});
+
+let timer = null;
+function start() {
+  refresh();
+  if (!timer) timer = setInterval(refresh, 2000);
+}
+if (token) start(); else showLogin();
+</script>
+</body>
+</html>

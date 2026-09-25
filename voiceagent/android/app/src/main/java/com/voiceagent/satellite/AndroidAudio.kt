@@ -10,6 +10,7 @@ import android.media.MediaRecorder
 import android.media.ToneGenerator
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import android.speech.tts.Voice as TtsVoice
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -60,8 +61,44 @@ class AndroidMic : Mic {
     }
 }
 
-/** Android's built-in TextToSpeech, switching voice by the language Whisper detected. */
-class AndroidTts(context: Context, private val log: Logger) : Tts {
+/** Voice choice per language ("en", "tr", "de" -> voice name) and speaking speed, from Settings. */
+data class VoicePrefs(val voices: Map<String, String> = emptyMap(), val rate: Float = 1.0f)
+
+object Voices {
+    /** Speech Services by Google: neural voices for many languages. Many phones default to a more robotic engine. */
+    const val GOOGLE_TTS = "com.google.android.tts"
+    val LANGUAGES = listOf("en", "tr", "de")
+    private val home = mapOf("en" to "US", "tr" to "TR", "de" to "DE")
+
+    /** Installed voices for a language, best first: home country, quality, on-device before online. */
+    fun installed(all: Set<TtsVoice>?, lang: String): List<TtsVoice> = all.orEmpty()
+        .filter { it.locale.language == lang && TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED !in it.features }
+        .sortedWith(compareByDescending<TtsVoice> { it.locale.country == home[lang] }
+            .thenByDescending { it.quality }
+            .thenBy { it.isNetworkConnectionRequired }
+            .thenBy { it.name })
+
+    fun pick(all: Set<TtsVoice>?, lang: String, preferred: String?): TtsVoice? {
+        val list = installed(all, lang)
+        return list.firstOrNull { it.name == preferred } ?: list.firstOrNull()
+    }
+
+    fun label(v: TtsVoice): String =
+        v.name + (if (v.isNetworkConnectionRequired) " (online)" else "") + " · ${v.locale.displayCountry}"
+
+    fun localeFor(lang: String): Locale = Locale.forLanguageTag(home[lang]?.let { "$lang-$it" } ?: lang)
+
+    /** Creates a TextToSpeech on Google's engine; Android falls back to the default engine if it isn't installed. */
+    fun engine(context: Context, onInit: TextToSpeech.OnInitListener) =
+        TextToSpeech(context.applicationContext, onInit, GOOGLE_TTS)
+}
+
+/** Android's TextToSpeech, switching voice by the language Whisper detected. */
+class AndroidTts(
+    context: Context,
+    private val log: Logger,
+    private val prefs: VoicePrefs = VoicePrefs(),
+) : Tts {
     private val ready = CountDownLatch(1)
 
     @Volatile
@@ -69,13 +106,14 @@ class AndroidTts(context: Context, private val log: Logger) : Tts {
     private val pending = ConcurrentHashMap<String, CountDownLatch>()
     private var currentLang: String? = null
 
-    private val tts: TextToSpeech = TextToSpeech(context.applicationContext) { status ->
+    private val tts: TextToSpeech = Voices.engine(context) { status ->
         ok = status == TextToSpeech.SUCCESS
         if (!ok) log.log("text to speech failed to start ($status)", null)
         ready.countDown()
     }
 
     init {
+        tts.setSpeechRate(prefs.rate)
         tts.setAudioAttributes(
             AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_MEDIA)
@@ -121,11 +159,19 @@ class AndroidTts(context: Context, private val log: Logger) : Tts {
     private fun useLanguage(lang: String) {
         if (lang == currentLang) return
         currentLang = lang
-        val result = tts.setLanguage(Locale.forLanguageTag(lang))
+        val result = tts.setLanguage(Voices.localeFor(lang))
         if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
             log.log("no voice installed for '$lang', using the default", null)
             tts.setLanguage(Locale.getDefault())
+            return
         }
+        // some engines throw from getVoices; the language's default voice is fine then
+        val voice = try {
+            Voices.pick(tts.voices, lang, prefs.voices[lang])
+        } catch (e: RuntimeException) {
+            null
+        }
+        if (voice != null) tts.voice = voice
     }
 
     fun shutdown() {

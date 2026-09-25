@@ -16,6 +16,12 @@ DEFAULTS: dict[str, Any] = {
         "followup_seconds": 6,
         # Saying one of these ends the conversation and returns to wake-word mode.
         "stop_phrases": ["stop", "thanks that's all", "that's all", "goodbye", "tamam", "teşekkürler", "danke"],
+        # Sleep mode: ignore everything, even the wake word, until "hey Jarvis, <wake phrase>".
+        # Matching ignores filler like "okay", "please" and the assistant's name.
+        "sleep_phrases": ["go to sleep", "stop listening", "sleep", "sleep mode",
+                          "uyu", "uyku moduna geç", "dinlemeyi bırak",
+                          "schlaf", "geh schlafen", "hör auf zuzuhören"],
+        "wake_phrases": ["wake up", "start listening", "uyan", "dinlemeye başla", "wach auf", "hör zu"],
         "persona": "",
     },
     "audio": {
@@ -40,6 +46,7 @@ DEFAULTS: dict[str, Any] = {
         "device": "auto",
         "compute_type": "int8",
         "language": None,         # None = auto-detect per utterance
+        "languages": ["en", "tr", "de"],  # auto-detect only picks among these; [] = any language
     },
     "tts": {
         "engine": "say",          # "say" (macOS) or "piper"
@@ -58,7 +65,13 @@ DEFAULTS: dict[str, Any] = {
         # Pro/Max account. Personal use on your own machine only, never for other users.
         "cli_path": "claude",
         "cli_model": "haiku",
-        "cli_args": ["--tools", ""],   # disables Claude Code's coding tools; drop if your CLI version rejects it
+        "cli_args": [],           # extra flags for the claude CLI
+        "cli_thinking": False,    # extended thinking: smarter on hard questions, ~0.7 s slower to start talking
+        # Your own MCP servers (claude_cli mode), same format as Claude Code's "mcpServers":
+        # {"home": {"command": "npx", "args": ["-y", "some-mcp-server"]}} or {"x": {"type": "http", "url": "..."}}
+        "mcp_servers": {},
+        # Weather, news, opening hours...: web search in both modes (CLI: WebSearch/WebFetch, API: web_search tool)
+        "web_search": True,
         "cli_timeout_s": 120,
     },
     "memory": {"path": "~/.voiceagent/memory.db"},
@@ -66,6 +79,9 @@ DEFAULTS: dict[str, Any] = {
         "host": "0.0.0.0",
         "port": 8765,
         "token": None,            # shared secret satellites must send; set this
+        # Admin web UI at http://<brain-ip>:<admin_port>, same token. Without a token it only listens on localhost.
+        "admin": True,
+        "admin_port": 8766,
     },
     "satellite": {
         "server": "ws://127.0.0.1:8765",
@@ -85,6 +101,8 @@ DEFAULTS: dict[str, Any] = {
             "auto_discover": True,
         },
         "timers": {"enabled": True},
+        # active once `python -m voiceagent roborock-login` has saved credentials
+        "roborock": {"enabled": True},
     },
 }
 
@@ -113,11 +131,15 @@ def _deep_merge(base: dict, override: dict) -> dict:
 def load_config(path: str | None = None) -> Config:
     candidates = [path] if path else ["config.yaml", "~/.voiceagent/config.yaml"]
     data: dict = {}
+    source = Path(os.path.expanduser(candidates[0] or "config.yaml"))
     for c in candidates:
         if not c:
             continue
         p = Path(os.path.expanduser(c))
         if p.exists():
             data = yaml.safe_load(p.read_text()) or {}
+            source = p
             break
-    return Config(_deep_merge(DEFAULTS, data))
+    cfg = Config(_deep_merge(DEFAULTS, data))
+    cfg.source = source.resolve()  # where the admin UI saves edits
+    return cfg

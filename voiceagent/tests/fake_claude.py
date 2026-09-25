@@ -24,7 +24,7 @@ srv.stdin.close(); srv.wait()
 def ev(e): print(json.dumps({"type": "stream_event", "event": e}), flush=True)
 ev({"type": "message_start"})
 for chunk in ["Done, ", "I saved that. ", "Tools: " + ",".join(sorted(names)) + ". ",
-              "Turkish=" + str("Reply in Turkish" in system) + "."]:
+              "Turkish=" + str("Reply in Turkish" in system + prompt) + "."]:
     ev({"type": "content_block_delta", "delta": {"type": "text_delta", "text": chunk}})
 ev({"type": "message_stop"})
 print(json.dumps({"type": "result", "is_error": res["result"]["isError"], "result": "ok"}))

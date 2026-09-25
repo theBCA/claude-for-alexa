@@ -116,8 +116,11 @@ class Agent:
         for _ in range(MAX_TOOL_ROUNDS):
             splitter = SentenceSplitter()
             kwargs = dict(model=llm.model, max_tokens=llm.max_tokens, system=system, messages=messages)
-            if self.tools.tools:
-                kwargs["tools"] = self.tools.schemas()
+            tools = self.tools.schemas()
+            if llm.web_search:
+                tools.append({"type": "web_search_20250305", "name": "web_search", "max_uses": 3})
+            if tools:
+                kwargs["tools"] = tools
             with self.client.messages.stream(**kwargs) as stream:
                 for delta in stream.text_stream:
                     emit(splitter.feed(delta))

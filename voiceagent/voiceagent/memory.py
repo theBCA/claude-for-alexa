@@ -69,6 +69,12 @@ class Memory:
             self._db.commit()
             return cur.rowcount
 
+    def remove_fact(self, text: str) -> bool:
+        with self._lock:
+            cur = self._db.execute("DELETE FROM facts WHERE text = ?", (text,))
+            self._db.commit()
+            return cur.rowcount > 0
+
     def facts(self) -> list[str]:
         with self._lock:
             return [r[0] for r in self._db.execute("SELECT text FROM facts ORDER BY id").fetchall()]

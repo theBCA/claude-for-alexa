@@ -21,7 +21,7 @@ Two providers, set with `llm.provider` in config.yaml:
 
 `anthropic` (default) uses an API key. Fastest replies, and the only option for anything other people use.
 
-`claude_cli` uses your own Claude Pro/Max subscription, for personal use on your own machine. Install Claude Code, run `claude` once and log in, then set `provider: claude_cli`. The brain runs the official CLI in headless mode (`claude -p`) and connects your tools to it over MCP. It never touches the CLI's login token, which is what Anthropic bans for third-party apps. Replies start one to three seconds later than with the API because the CLI starts fresh each turn. If your CLI version rejects `--tools ""` or `--include-partial-messages`, update Claude Code or adjust `llm.cli_args`.
+`claude_cli` uses your own Claude Pro/Max subscription, for personal use on your own machine. Install Claude Code, run `claude` once and log in, then set `provider: claude_cli`. The brain runs the official CLI in headless mode (`claude -p`) and connects your tools to it over MCP. It never touches the CLI's login token, which is what Anthropic bans for third-party apps. The brain starts the CLI while you are still talking and turns off extended thinking, so the first word comes about two seconds after you stop speaking. Your own Claude Code settings, hooks and plugins are not loaded into it. If your CLI version rejects a flag such as `--include-partial-messages` or `--setting-sources`, update Claude Code or adjust `llm.cli_args`.
 
 ## Brain and satellites
 
@@ -66,9 +66,25 @@ python -m voiceagent run               # all-in-one voice mode on the Mac: say "
 
 Grant the terminal microphone access when macOS asks. Keep the Mac awake with `caffeinate -ims` and the lid open (a closed MacBook disconnects its mic).
 
+## Admin UI
+
+The brain serves a control page at `http://<mac-ip>:8766` (the same token as the satellites). It shows connected satellites and sleep mode, has buttons for lights and the vacuum, a form for every tool, a typed chat, announcements to every speaker, the memory list, a config.yaml editor with a restart button, and a live log. It works on a phone browser.
+
+## Sleep mode
+
+"Jarvis, go to sleep" (or "stop listening", "uyu", "dinlemeyi bırak", "schlaf") makes it ignore everything, even the wake word, until you say "Hey Jarvis, wake up" ("uyan", "wach auf"). The phone shows "Sleeping" in its notification, and the admin UI has a switch for it.
+
+## Devices
+
+Govee lights work over the LAN once "LAN Control" is on for each light in the Govee Home app; the brain finds them at startup.
+
+Roborock vacuums: run `python -m voiceagent roborock-login` once. It emails you a code and saves the login to `~/.voiceagent/roborock.json`. After a restart you can say "vacuum the kitchen" or "send the vacuum home". Room names are the ones in the Roborock app.
+
+Anything with an MCP server (calendar, Spotify, Home Assistant) can be added under `llm.mcp_servers` in claude_cli mode, and web search is on by default.
+
 ## Things to say
 
-"Hey Jarvis, make the living room warm and dim." / "Set a timer for ten minutes for the pasta." / "Remember that Ceren likes the lights cool in the morning." / Or just talk. After each reply it keeps listening for six seconds, so you don't need the wake word again mid-conversation. Say "that's all" to end.
+"Hey Jarvis, make the living room warm and dim." / "Vacuum the kitchen." / "What's the weather tomorrow?" / "Set a timer for ten minutes for the pasta." / "Remember that Ceren likes the lights cool in the morning." / Or just talk. After each reply it keeps listening for six seconds, so you don't need the wake word again mid-conversation. Say "that's all" to end.
 
 It answers in the language you speak. Turkish uses the Yelda voice; install it under System Settings, Accessibility, Spoken Content, System Voice, Manage Voices.
 
@@ -86,7 +102,8 @@ voiceagent/
   claude_cli.py   personal mode through the official claude CLI, plus a localhost tool relay
   mcp_bridge.py   tiny MCP server the CLI launches; forwards tool calls to the relay
   memory.py       SQLite: short-term conversation, long-term facts
-  tools/          one file per capability (core.py, govee.py)
+  tools/          one file per capability (core.py, govee.py, roborock.py)
+  admin.py        admin web UI and its JSON API (admin.html is the page)
 tests/            python -m unittest discover -s tests
 ```
 

@@ -111,13 +111,25 @@ class SpeechToText:
         from faster_whisper import WhisperModel
 
         self.language = cfg.language
+        self.languages = list(cfg.languages or [])
         self.model = WhisperModel(cfg.model, device=cfg.device, compute_type=cfg.compute_type)
+
+    def _run(self, audio, language):
+        segments, info = self.model.transcribe(audio, language=language, beam_size=1, vad_filter=True)
+        return list(segments), info
 
     def transcribe(self, pcm: bytes) -> tuple[str, str | None]:
         audio = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
-        segments, info = self.model.transcribe(audio, language=self.language, beam_size=1, vad_filter=True)
-        text = " ".join(s.text.strip() for s in segments).strip()
-        return text, getattr(info, "language", None)
+        segments, info = self._run(audio, self.language)
+        lang = getattr(info, "language", None)
+        if not self.language and self.languages and lang not in self.languages:
+            # small models mistake short Turkish for Russian and the like: redo it in the likeliest allowed language
+            probs = dict(getattr(info, "all_language_probs", None) or [])
+            lang = max(self.languages, key=lambda code: probs.get(code, 0.0))
+            segments, info = self._run(audio, lang)
+        # Whisper invents words on noise; these thresholds are the ones OpenAI's reference code uses
+        kept = [s for s in segments if not (s.no_speech_prob > 0.6 and s.avg_logprob < -1.0)]
+        return " ".join(s.text.strip() for s in kept).strip(), lang
 
 
 
