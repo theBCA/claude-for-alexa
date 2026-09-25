@@ -103,6 +103,12 @@ DEFAULTS: dict[str, Any] = {
         "timers": {"enabled": True},
         # active once `python -m voiceagent roborock-login` has saved credentials
         "roborock": {"enabled": True},
+        # active once `python -m voiceagent spotify-login` has saved a token (needs Spotify Premium)
+        "spotify": {
+            "enabled": True,
+            "device": None,       # default Spotify Connect device name, e.g. "Galaxy" or "Echo"; None = the active one
+            "duck_volume": 20,    # turn music down to this while you talk to the assistant; 0 = off
+        },
     },
 }
 

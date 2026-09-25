@@ -26,7 +26,7 @@ It is his own Claude-powered assistant. The Echo Dot is used only as a Bluetooth
 
 ## Current state (v0.2)
 
-25 Python tests and 13 Android unit tests pass: `python -m unittest discover -s tests` (v0.3 count)
+32 Python tests and 13 Android unit tests pass: `python -m unittest discover -s tests` (v0.3 count)
 
 Tested: agent tool loop (fake Anthropic client), memory, sentence streaming, Govee packet format, timers, VAD collector state machine, full websocket protocol against a real server, the real satellite client end to end (scripted mic, print TTS), and the claude_cli provider end to end through the MCP bridge (fake `claude` binary that spawns the bridge and calls a tool).
 
@@ -61,9 +61,10 @@ voiceagent/
   tools/__init__.py  ToolRegistry: register(name, description, schema) decorator, run() never raises
   tools/core.py   remember, forget, set_timer (announces through ctx["announce"], broadcast to all satellites in server mode)
   tools/govee.py  LAN API: discover (multicast 239.255.255.250:4001, replies on 4002), control on 4003, control_lights tool
+  tools/spotify.py   Spotify Web API tool with PKCE login and music ducking during conversations
   tools/roborock.py  Roborock vacuum via python-roborock on its own event loop thread; roborock-login saves ~/.voiceagent/roborock.json
   admin.py        admin web UI: stdlib HTTP server thread, JSON API, log buffer; admin.html is the single page
-tests/            test_core.py, test_network.py (protocol, sleep mode, admin API), test_claude_cli.py, test_roborock.py, fake_claude.py
+tests/            test_core.py, test_network.py (protocol, sleep mode, admin API), test_claude_cli.py, test_roborock.py, test_spotify.py, fake_claude.py
 README.md         setup and usage, including Android/Termux steps
 ARCHITECTURE.md   product thinking, latency budget, protocol trade-offs, roadmap, open product questions
 config.example.yaml
@@ -107,6 +108,8 @@ Open product questions (not decided): first customer (Home Assistant tinkerers v
 - Roborock vacuum (`tools/roborock.py`, python-roborock 7.9): `python -m voiceagent roborock-login` once (email code), then a `vacuum` tool (start, stop, pause, dock, status, find, clean_rooms by room name). Local network first, Roborock cloud as fallback. Unit tested with a fake device only; not yet tried on Berk's vacuum (Roborock at 192.168.178.26).
 - Admin web UI (`admin.py` + `admin.html`) at http://<brain>:8766 with the same token: sleep toggle, satellites, light and vacuum cards, forms for every tool, typed chat, announcements, memory, config.yaml editor with restart, live log.
 - Android app: prefers Google's TTS engine, picks the best installed voice per language, and has a voice picker per language with Test buttons, a speed setting and a "Download voices" button. Shows "Sleeping" in the notification.
+- Spotify (`tools/spotify.py`): official Web API with PKCE (`spotify-login`, redirect http://127.0.0.1:8888/callback, tokens in ~/.voiceagent/spotify.json). One `spotify` tool: play by query/type or uri, search, pause, next, previous, volume, now_playing, devices, transfer, play_liked, save_current, queue. The model turns requests in any language into Spotify search queries. Music is ducked to `tools.spotify.duck_volume` on the wake word and restored at conversation end (tool hooks `on_wake` / `on_conversation_end` in ToolRegistry.ctx, fired by the brain in threads). Spotify's February 2026 dev-mode rules apply: owner needs Premium, max 5 users, search limit 10, library writes go to /me/library. Unit tested against a fake API only.
+- Roborock login: Berk's account has two-step verification, so only the email code flow works, and Roborock rate-limits code requests (error 9002).
 - Network scan (September 25, 2026) on 192.168.178.0/24: Roborock .26, likely Govee .34 (LAN Control was off, discovery got no answer), two Lepro bulbs .20 and .41, Echo .32.
 
 ## How to work in this repo

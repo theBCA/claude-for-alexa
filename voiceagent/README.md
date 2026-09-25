@@ -80,6 +80,8 @@ Govee lights work over the LAN once "LAN Control" is on for each light in the Go
 
 Roborock vacuums: run `python -m voiceagent roborock-login` once. It emails you a code and saves the login to `~/.voiceagent/roborock.json`. After a restart you can say "vacuum the kitchen" or "send the vacuum home". Room names are the ones in the Roborock app.
 
+Spotify (needs Premium): create an app at developer.spotify.com/dashboard with the Web API and the redirect URI `http://127.0.0.1:8888/callback`, then run `python -m voiceagent spotify-login` and paste its Client ID. Ask in any language ("Tarkan'dan Şımarık'ı aç", "spiel Rammstein", "play something calm for dinner"); it plays on whichever Spotify device is active, or on `tools.spotify.device`. Music is turned down while you talk to Jarvis and comes back after.
+
 Anything with an MCP server (calendar, Spotify, Home Assistant) can be added under `llm.mcp_servers` in claude_cli mode, and web search is on by default.
 
 ## Things to say
@@ -102,7 +104,7 @@ voiceagent/
   claude_cli.py   personal mode through the official claude CLI, plus a localhost tool relay
   mcp_bridge.py   tiny MCP server the CLI launches; forwards tool calls to the relay
   memory.py       SQLite: short-term conversation, long-term facts
-  tools/          one file per capability (core.py, govee.py, roborock.py)
+  tools/          one file per capability (core.py, govee.py, roborock.py, spotify.py)
   admin.py        admin web UI and its JSON API (admin.html is the page)
 tests/            python -m unittest discover -s tests
 ```

@@ -52,6 +52,9 @@ def login(email: str, password: str | None = None,
                          "Wait about an hour without requesting codes (the Roborock app counts too), "
                          "or log in with your password: python -m voiceagent roborock-login --password") from None
     except RoborockException as e:
+        if "two-step" in str(e):
+            raise SystemExit("This Roborock account has two-step verification, so password login isn't allowed. "
+                             "Run roborock-login without --password to get an email code instead.") from None
         raise SystemExit(f"Roborock login failed: {e}") from None
     CREDENTIALS.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(CREDENTIALS, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)

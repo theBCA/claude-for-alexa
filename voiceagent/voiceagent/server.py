@@ -82,6 +82,7 @@ class Session:
         self.brain.cancel_prewarm()
         if notify:
             self.outbox.put_nowait({"type": "conversation_end"})
+        self.brain.fire("on_conversation_end")
 
     async def on_audio(self, chunk: bytes) -> None:
         if self.state == "idle":
@@ -94,6 +95,7 @@ class Session:
                     log.info("[%s] wake word", self.id)
                     self.outbox.put_nowait({"type": "wake"})
                     self.brain.prewarm()
+                    self.brain.fire("on_wake")
                 self._listen(self.brain.cfg.listen.start_timeout_s)
         elif self.state == "listening":
             result = self.collector.feed(chunk)
@@ -201,6 +203,11 @@ class Brain:
         log.info("sleep mode %s", "on" if asleep else "off")
         for s in list(self.sessions):
             s.outbox.put_nowait({"type": "sleep" if asleep else "awake"})
+
+    def fire(self, event: str) -> None:
+        """Run tool hooks (e.g. Spotify ducking) off the event loop; they may do network calls."""
+        for fn in (self.tools.ctx.get(event, []) if self.tools else []):
+            threading.Thread(target=fn, daemon=True).start()
 
     def prewarm(self) -> None:
         """Start the next agent call while the user is still talking (claude_cli: hides CLI startup)."""

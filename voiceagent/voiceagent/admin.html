@@ -141,6 +141,23 @@
           </div>
           <div id="vacOut" class="result"></div>
         </div>
+        <div class="card hidden" id="spotifyCard">
+          <h2>Spotify</h2>
+          <div class="row">
+            <input id="spQuery" type="text" placeholder="Song, artist or playlist" style="flex:1"
+                   onkeydown="if(event.key==='Enter')spotify('play')">
+            <select id="spType"><option>track</option><option>artist</option><option>album</option><option>playlist</option></select>
+          </div>
+          <div class="row">
+            <button class="btn primary" onclick="spotify('play')">Play</button>
+            <button class="btn" onclick="spotify('pause')">Pause</button>
+            <button class="btn" onclick="spotify('previous')">Prev</button>
+            <button class="btn" onclick="spotify('next')">Next</button>
+            <button class="btn" onclick="spotify('now_playing')">Now playing</button>
+            <button class="btn" onclick="spotify('devices')">Devices</button>
+          </div>
+          <div id="spOut" class="result"></div>
+        </div>
         <div class="card">
           <h2>Announce</h2>
           <p class="muted" style="margin-top:0">Speak a message on every connected satellite.</p>
@@ -255,6 +272,7 @@ async function refresh() {
   const names = status.tools.map(t => t.name);
   $("lightsCard").classList.toggle("hidden", !names.includes("control_lights"));
   $("vacuumCard").classList.toggle("hidden", !names.includes("vacuum"));
+  $("spotifyCard").classList.toggle("hidden", !names.includes("spotify"));
   const key = names.join(",");
   if (key !== toolsKey) { toolsKey = key; buildToolForms(status.tools); }
   renderLog(status.log);
@@ -296,6 +314,13 @@ function vacuum(action) {
   const args = { action };
   if (action === "clean_rooms") args.rooms = $("vacRooms").value.split(",").map(s => s.trim()).filter(Boolean);
   runTool("vacuum", args, $("vacOut"));
+}
+
+function spotify(action) {
+  const args = { action };
+  const q = $("spQuery").value.trim();
+  if (action === "play" && q) { args.query = q; args.type = $("spType").value; }
+  runTool("spotify", args, $("spOut"));
 }
 
 function buildToolForms(tools) {

@@ -19,6 +19,7 @@ from .tools import ToolRegistry
 from .tools.core import register_core_tools
 from .tools.govee import register_govee_tools
 from .tools.roborock import register_roborock_tools
+from .tools.spotify import register_spotify_tools
 
 log = logging.getLogger(__name__)
 
@@ -35,6 +36,8 @@ def build_tools(cfg, memory: Memory) -> ToolRegistry:
         log.info("govee lights: %s", found or "none found")
     if cfg.tools.roborock.enabled and register_roborock_tools(reg):
         log.info("roborock: enabled")
+    if cfg.tools.spotify.enabled and register_spotify_tools(reg, cfg.tools.spotify):
+        log.info("spotify: enabled")
     return reg
 
 

@@ -37,6 +37,9 @@ tools:
     devices: {}          # fill from `python -m voiceagent govee-discover`, e.g. {living room: 192.168.1.40}
   roborock:
     enabled: true        # active after `python -m voiceagent roborock-login`
+  spotify:
+    device: null         # default Spotify Connect device, e.g. "Galaxy" or "Echo"; null = the active one
+    duck_volume: 20      # music volume while you talk to the assistant; 0 = off
 
 server:
   port: 8765
